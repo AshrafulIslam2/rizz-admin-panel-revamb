@@ -1,22 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useGetPagesQuery, useCreatePageTreeMutation, useUpdatePageMutation, useDeletePageMutation } from "@/lib/slices/apiSlice";
+
+type PageId = number | string;
 
 type PageRecord = {
-  id: number;
+  id: PageId;
   title: string;
   slug: string;
-  parentId: number | null;
+  parentId: PageId | null;
   isVisible: boolean;
   order: number;
   children?: PageRecord[];
 };
 
 type PageDraft = {
-  id?: number;
+  id?: PageId;
   title: string;
   slug: string;
-  parentId: number | null;
+  parentId: PageId | null;
   isVisible: boolean;
   order: number;
   children: PageDraft[];
@@ -32,7 +35,7 @@ type Toast = {
 type PagePayload = {
   title: string;
   slug: string;
-  parentId: number | null;
+  parentId: PageId | null;
   isVisible: boolean;
   order: number;
 };
@@ -61,7 +64,7 @@ function pageToDraft(page: PageRecord): PageDraft {
 }
 
 function draftToRecord(draft: PageDraft): PageRecord {
-  if (typeof draft.id !== "number") {
+  if (draft.id === undefined || draft.id === null) {
     throw new Error("Cannot convert an unsaved draft into a record.");
   }
 
@@ -76,7 +79,7 @@ function draftToRecord(draft: PageDraft): PageRecord {
   };
 }
 
-function createEmptyDraft(parentId: number | null = null): PageDraft {
+function createEmptyDraft(parentId: PageId | null = null): PageDraft {
   return {
     title: "",
     slug: "",
@@ -171,18 +174,18 @@ function removeChildAtPath(draft: PageDraft, path: DraftPath): PageDraft {
   };
 }
 
-function collectDraftIds(draft?: PageDraft | null): number[] {
+function collectDraftIds(draft?: PageDraft | null): PageId[] {
   if (!draft) {
     return [];
   }
 
   return [
-    ...(typeof draft.id === "number" ? [draft.id] : []),
+    ...(draft.id !== undefined && draft.id !== null ? [draft.id] : []),
     ...draft.children.flatMap((child) => collectDraftIds(child)),
   ];
 }
 
-function collectRecordIds(page: PageRecord): number[] {
+function collectRecordIds(page: PageRecord): PageId[] {
   return [
     ...(page.children ?? []).flatMap((child) => collectRecordIds(child)),
     page.id,
@@ -191,9 +194,9 @@ function collectRecordIds(page: PageRecord): number[] {
 
 function flattenParentOptions(
   pages: PageRecord[],
-  excludedIds: Set<number>,
+  excludedIds: Set<PageId>,
   depth = 0,
-): Array<{ id: number; title: string; depth: number }> {
+): Array<{ id: PageId; title: string; depth: number }> {
   return pages.flatMap((page) => {
     const current = excludedIds.has(page.id)
       ? []
@@ -204,70 +207,6 @@ function flattenParentOptions(
       ...flattenParentOptions(page.children ?? [], excludedIds, depth + 1),
     ];
   });
-}
-
-async function readResponseMessage(response: Response): Promise<string> {
-  try {
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("application/json")) {
-      const payload = (await response.json()) as
-        | { message?: string; error?: string }
-        | undefined;
-
-      return payload?.message ?? payload?.error ?? response.statusText;
-    }
-
-    const text = await response.text();
-    return text || response.statusText;
-  } catch {
-    return response.statusText || "Request failed";
-  }
-}
-
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    throw new Error(await readResponseMessage(response));
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    return (await response.json()) as T;
-  }
-
-  return (await response.text()) as T;
-}
-
-function extractPageArray(value: unknown): PageRecord[] {
-  if (Array.isArray(value)) {
-    return sortPages(value as PageRecord[]);
-  }
-
-  if (value && typeof value === "object") {
-    const candidate = value as { pages?: unknown; data?: unknown };
-
-    if (Array.isArray(candidate.pages)) {
-      return sortPages(candidate.pages as PageRecord[]);
-    }
-
-    if (Array.isArray(candidate.data)) {
-      return sortPages(candidate.data as PageRecord[]);
-    }
-  }
-
-  return [];
 }
 
 function PageCard({
@@ -466,7 +405,7 @@ function PageForm({
 }: {
   draft: PageDraft;
   mode: "create" | "edit";
-  parentOptions: Array<{ id: number; title: string; depth: number }>;
+  parentOptions: Array<{ id: PageId; title: string; depth: number }>;
   onChange: (path: DraftPath, field: keyof PageDraft, value: string | number | boolean | null) => void;
   onAddChild: (path: DraftPath) => void;
   onRemoveChild: (path: DraftPath) => void;
@@ -528,10 +467,16 @@ function PageForm({
         <label className="space-y-1.5">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Parent page</span>
           <select
-            value={draft.parentId ?? ""}
+            value={String(draft.parentId ?? "")}
             onChange={(event) => {
               const value = event.target.value;
-              onChange([], "parentId", value === "" ? null : Number(value));
+              if (value === "") {
+                onChange([], "parentId", null);
+                return;
+              }
+
+              const parsedNumericId = Number(value);
+              onChange([], "parentId", Number.isNaN(parsedNumericId) ? value : parsedNumericId);
             }}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-teal-400 focus:outline-none"
           >
@@ -634,8 +579,6 @@ function PageForm({
 
 export function PagesAdminPanel() {
   const [pages, setPages] = useState<PageRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [draft, setDraft] = useState<PageDraft | null>(null);
   const [originalDraft, setOriginalDraft] = useState<PageDraft | null>(null);
@@ -643,6 +586,13 @@ export function PagesAdminPanel() {
   const [deleteTarget, setDeleteTarget] = useState<PageRecord | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Redux RTK Query hooks
+  const { data: pagesData, isLoading, error: pagesError, refetch: refetchPages } = useGetPagesQuery();
+  const [createPageTree] = useCreatePageTreeMutation();
+  const [updatePage] = useUpdatePageMutation();
+  const [deletePage] = useDeletePageMutation();
 
   function pushToast(tone: Toast["tone"], title: string, description: string) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -652,28 +602,21 @@ export function PagesAdminPanel() {
     }, 3600);
   }
 
-  async function loadPages() {
-    setIsLoading(true);
-    setLoadError(null);
-
-    try {
-      const response = await requestJson<unknown>("/api/pages", { method: "GET" });
-      setPages(extractPageArray(response));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to load pages.";
-      setPages([]);
-      setLoadError(message);
-      pushToast("error", "Failed to load pages", message);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
+  // Update pages state when Redux query data changes
   useEffect(() => {
-    void loadPages();
-  }, []);
+    if (pagesData) {
+      setPages(pagesData);
+      if (pagesError) {
+        const message = pagesError instanceof Error ? pagesError.message : "Unable to load pages.";
+        setLoadError(message);
+        pushToast("error", "Failed to load pages", message);
+      } else {
+        setLoadError(null);
+      }
+    }
+  }, [pagesData, pagesError]);
 
-  function openCreate(parentId: number | null = null) {
+  function openCreate(parentId: PageId | null = null) {
     setMode("create");
     setDraft(createEmptyDraft(parentId));
     setOriginalDraft(null);
@@ -734,10 +677,15 @@ export function PagesAdminPanel() {
       await deleteSubtree(child);
     }
 
-    await requestJson<void>(`/api/pages/${page.id}`, { method: "DELETE" });
+    try {
+      await deletePage(page.id).unwrap();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to delete ${page.title}`;
+      throw new Error(message);
+    }
   }
 
-  async function syncDraft(node: PageDraft, parentId: number | null, originalNode: PageDraft | null): Promise<number> {
+  async function syncDraft(node: PageDraft, parentId: PageId | null, originalNode: PageDraft | null): Promise<PageId> {
     const payload: PagePayload = {
       title: node.title.trim(),
       slug: node.slug.trim(),
@@ -746,58 +694,57 @@ export function PagesAdminPanel() {
       order: Number.isNaN(Number(node.order)) ? 0 : Number(node.order),
     };
 
-    const response = node.id
-      ? await requestJson<PageRecord>(`/api/pages/${node.id}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        })
-      : await requestJson<PageRecord>("/api/pages", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+    try {
+      const response = node.id
+        ? await updatePage({ id: node.id, data: payload }).unwrap()
+        : await createPageTree(payload).unwrap();
 
-    const savedId = response?.id ?? node.id;
+      const savedId = response?.id ?? node.id;
 
-    if (typeof savedId !== "number") {
-      throw new Error("The API did not return a page id.");
-    }
-
-    const originalChildren = originalNode?.children ?? [];
-    const originalChildrenById = new Map<number, PageDraft>(
-      originalChildren.flatMap((child) => (typeof child.id === "number" ? [[child.id, child]] : [])),
-    );
-    const currentChildrenIds = new Set<number>(
-      node.children.flatMap((child) => (typeof child.id === "number" ? [child.id] : [])),
-    );
-
-    for (const child of node.children) {
-      const childOriginal = typeof child.id === "number" ? originalChildrenById.get(child.id) ?? null : null;
-      await syncDraft(child, savedId, childOriginal ?? null);
-    }
-
-    for (const originalChild of originalChildren) {
-      if (typeof originalChild.id !== "number") {
-        continue;
+      if (savedId === undefined || savedId === null) {
+        throw new Error("The API did not return a page id.");
       }
 
-      if (currentChildrenIds.has(originalChild.id)) {
-        continue;
+      const originalChildren = originalNode?.children ?? [];
+      const originalChildrenById = new Map<PageId, PageDraft>(
+        originalChildren.flatMap((child) => (child.id !== undefined && child.id !== null ? [[child.id, child]] : [])),
+      );
+      const currentChildrenIds = new Set<PageId>(
+        node.children.flatMap((child) => (child.id !== undefined && child.id !== null ? [child.id] : [])),
+      );
+
+      for (const child of node.children) {
+        const childOriginal = child.id !== undefined && child.id !== null ? originalChildrenById.get(child.id) ?? null : null;
+        await syncDraft(child, savedId, childOriginal ?? null);
       }
 
-      const subtree: PageDraft = {
-        id: originalChild.id,
-        title: originalChild.title,
-        slug: originalChild.slug,
-        parentId: originalChild.parentId,
-        isVisible: originalChild.isVisible,
-        order: originalChild.order,
-        children: originalChild.children ?? [],
-      };
+      for (const originalChild of originalChildren) {
+        if (originalChild.id === undefined || originalChild.id === null) {
+          continue;
+        }
 
-      await deleteSubtree(draftToRecord(subtree));
+        if (currentChildrenIds.has(originalChild.id)) {
+          continue;
+        }
+
+        const subtree: PageDraft = {
+          id: originalChild.id,
+          title: originalChild.title,
+          slug: originalChild.slug,
+          parentId: originalChild.parentId,
+          isVisible: originalChild.isVisible,
+          order: originalChild.order,
+          children: originalChild.children ?? [],
+        };
+
+        await deleteSubtree(draftToRecord(subtree));
+      }
+
+      return savedId;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to sync draft";
+      throw new Error(message);
     }
-
-    return savedId;
   }
 
   async function handleSubmit() {
@@ -824,7 +771,8 @@ export function PagesAdminPanel() {
       );
       setDraft(null);
       setOriginalDraft(null);
-      await loadPages();
+      // Refetch pages from Redux store
+      await refetchPages();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save the page.";
       pushToast("error", "Save failed", message);
@@ -850,7 +798,8 @@ export function PagesAdminPanel() {
       }
 
       setDeleteTarget(null);
-      await loadPages();
+      // Refetch pages from Redux store
+      await refetchPages();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to delete the page.";
       pushToast("error", "Delete failed", message);
@@ -859,7 +808,10 @@ export function PagesAdminPanel() {
     }
   }
 
-  const excludedParentIds = new Set<number>([...(draft?.id ? [draft.id] : []), ...collectDraftIds(draft)]);
+  const excludedParentIds = new Set<PageId>([
+    ...(draft?.id !== undefined && draft?.id !== null ? [draft.id] : []),
+    ...collectDraftIds(draft),
+  ]);
   const parentOptions = flattenParentOptions(pages, excludedParentIds);
 
   return (
@@ -911,7 +863,7 @@ export function PagesAdminPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void loadPages()}
+                  onClick={() => void refetchPages()}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                 >
                   Refresh
@@ -998,7 +950,7 @@ export function PagesAdminPanel() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => void loadPages()}
+                      onClick={() => void refetchPages()}
                       className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                     >
                       Reload tree
