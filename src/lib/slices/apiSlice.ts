@@ -127,6 +127,12 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Hero'],
     }),
+
+    // Get hero directly by hero ID (page ID)
+    getHeroById: builder.query<HeroPayload, PageId>({
+      query: (heroId) => `/hero/${heroId}`,
+      providesTags: ['Hero'],
+    }),
   }),
 });
 
@@ -140,4 +146,5 @@ export const {
   useReplacePageHeroMutation,
   usePatchPageHeroMutation,
   useDeletePageHeroMutation,
+  useGetHeroByIdQuery,
 } = apiSlice;

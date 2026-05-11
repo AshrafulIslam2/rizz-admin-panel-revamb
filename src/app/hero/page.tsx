@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   useCreatePageHeroMutation,
   useDeletePageHeroMutation,
@@ -13,6 +14,7 @@ import {
 type PageId = number | string;
 
 type PageRecord = {
+  hero: HeroPayload;
   id: PageId;
   title: string;
   slug: string;
@@ -64,12 +66,14 @@ function PageHeroPanel({
   onEditHero,
   onDeleteHero,
   onToggleActive,
+  onViewDetails,
 }: {
   page: PageRecord & { depth: number };
   onCreateHero: (page: PageRecord) => void;
   onEditHero: (page: PageRecord, hero: HeroPayload) => void;
   onDeleteHero: (page: PageRecord) => void;
   onToggleActive: (page: PageRecord, hero: HeroPayload) => void;
+  onViewDetails: (heroId: PageId) => void;
 }) {
   const { data: hero, error, isFetching } = useGetPageHeroQuery(page.id);
   const errorStatus = getErrorStatus(error);
@@ -102,7 +106,10 @@ function PageHeroPanel({
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
         {heroData ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div 
+              className="flex flex-wrap items-start justify-between gap-3 cursor-pointer rounded-xl border border-transparent hover:border-teal-200 hover:bg-teal-50/30 p-3 transition"
+              onClick={() => onViewDetails(page.id)}
+            >
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">Current hero</p>
                 <h4 className="mt-1 text-lg font-semibold text-slate-950">{heroData.title}</h4>
@@ -114,6 +121,13 @@ function PageHeroPanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onViewDetails(page.hero.id)}
+                className="rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 transition hover:border-blue-300 hover:bg-blue-100"
+              >
+                View Details
+              </button>
               <button
                 type="button"
                 onClick={() => onEditHero(page, heroData)}
@@ -357,6 +371,7 @@ function HeroForm({
 }
 
 export default function HeroPage() {
+  const router = useRouter();
   const [selectedPage, setSelectedPage] = useState<PageRecord | null>(null);
   const [selectedHero, setSelectedHero] = useState<HeroPayload | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -372,6 +387,10 @@ export default function HeroPage() {
   const pages = useMemo(() => sortPages(pagesData ?? []), [pagesData]);
   const flatPages = useMemo(() => flattenPages(pages), [pages]);
   const isSaving = isCreating || isPatching;
+
+  function handleViewDetails(heroId: PageId) {
+    router.push(`/hero/${heroId}`);
+  }
 
   function openCreateHero(page: PageRecord) {
     setSelectedPage(page);
@@ -541,6 +560,7 @@ export default function HeroPage() {
                       onEditHero={openEditHero}
                       onDeleteHero={handleDeleteHero}
                       onToggleActive={handleToggleActive}
+                      onViewDetails={handleViewDetails}
                     />
                   </div>
                 ))
