@@ -534,28 +534,7 @@ export default function HeroPage() {
                 </div>
               ) : flatPages.length > 0 ? (
                 flatPages.map((page) => (
-                  <div key={page.id} className="space-y-3">
-                    <div
-                      className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm shadow-slate-200/40 backdrop-blur"
-                      style={{ marginLeft: page.depth * 16 }}
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-base font-semibold text-slate-950">{page.title}</h3>
-                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
-                              {page.isVisible ? "Visible" : "Hidden"}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                            <span>/{page.slug}</span>
-                            <span>Order {page.order}</span>
-                            <span>ID {page.id}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
+                  <div key={page.id} style={{ marginLeft: page.depth * 16 }}>
                     <PageHeroPanel
                       page={page}
                       onCreateHero={openCreateHero}
