@@ -815,31 +815,7 @@ export function PagesAdminPanel() {
   const parentOptions = flattenParentOptions(pages, excludedParentIds);
 
   return (
-    <div className="flex min-h-screen text-slate-950">
-      <aside className="hidden w-72 flex-col border-r border-white/70 bg-slate-950/95 px-5 py-6 text-slate-100 shadow-[0_0_60px_rgba(15,23,42,0.18)] lg:flex">
-        <div className="space-y-1 border-b border-white/10 pb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-300">RIZZ Admin</p>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">Content manager</h1>
-          <p className="text-sm text-slate-400">A minimal workspace for nested page management.</p>
-        </div>
-
-        <nav className="mt-6 space-y-2">
-          <a
-            href="#pages"
-            className="flex items-center gap-3 rounded-2xl border border-teal-400/20 bg-teal-500/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-teal-300/40 hover:bg-teal-500/15"
-          >
-            <span className="h-2.5 w-2.5 rounded-full bg-teal-300" />
-            Pages
-          </a>
-        </nav>
-
-        <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-          <p className="font-medium text-white">Backend connected</p>
-          <p className="mt-1 text-slate-400">GET, POST, PATCH, and DELETE all point at /api/pages.</p>
-        </div>
-      </aside>
-
-      <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+    <div className="flex-1 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
           <header className="rounded-[28px] border border-white/70 bg-white/80 px-5 py-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -970,7 +946,6 @@ export function PagesAdminPanel() {
             </div>
           </div>
         </div>
-      </main>
 
       {deleteTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6 backdrop-blur-sm">
