@@ -4,6 +4,17 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/a
 
 type PageId = number | string;
 
+export interface HeroPayload {
+  type: 'IMAGE' | 'VIDEO';
+  backgroundImageUrl: string;
+  slogan: string;
+  title: string;
+  subtitle: string;
+  keyPoints: string[];
+  isActive: boolean;
+  order: number;
+}
+
 interface PageRecord {
   id: PageId;
   title: string;
@@ -35,7 +46,7 @@ export const apiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Pages', 'Page'],
+  tagTypes: ['Pages', 'Page', 'Hero'],
   endpoints: (builder) => ({
     // Get all pages
     getPages: builder.query<PageRecord[], void>({
@@ -71,6 +82,51 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Pages'],
     }),
+
+    // Create a hero for a specific page
+    createPageHero: builder.mutation<HeroPayload, { pageId: PageId; data: HeroPayload }>({
+      query: ({ pageId, data }) => ({
+        url: `/pages/${pageId}/hero`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Hero'],
+    }),
+
+    // Get a hero for a specific page
+    getPageHero: builder.query<HeroPayload, PageId>({
+      query: (pageId) => `/pages/${pageId}/hero`,
+      providesTags: ['Hero'],
+    }),
+
+    // Replace a hero for a specific page
+    replacePageHero: builder.mutation<HeroPayload, { pageId: PageId; data: HeroPayload }>({
+      query: ({ pageId, data }) => ({
+        url: `/pages/${pageId}/hero`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Hero'],
+    }),
+
+    // Partially update a hero for a specific page
+    patchPageHero: builder.mutation<HeroPayload, { pageId: PageId; data: Partial<HeroPayload> }>({
+      query: ({ pageId, data }) => ({
+        url: `/pages/${pageId}/hero`,
+        method: 'PATCH',
+        body: data,
+      }),
+      invalidatesTags: ['Hero'],
+    }),
+
+    // Delete a hero for a specific page
+    deletePageHero: builder.mutation<void, PageId>({
+      query: (pageId) => ({
+        url: `/pages/${pageId}/hero`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Hero'],
+    }),
   }),
 });
 
@@ -79,4 +135,9 @@ export const {
   useCreatePageTreeMutation,
   useUpdatePageMutation,
   useDeletePageMutation,
+  useCreatePageHeroMutation,
+  useGetPageHeroQuery,
+  useReplacePageHeroMutation,
+  usePatchPageHeroMutation,
+  useDeletePageHeroMutation,
 } = apiSlice;
