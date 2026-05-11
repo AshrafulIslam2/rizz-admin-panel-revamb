@@ -7,7 +7,6 @@ import {
   useGetPageHeroQuery,
   useGetPagesQuery,
   usePatchPageHeroMutation,
-  useReplacePageHeroMutation,
   type HeroPayload,
 } from "@/lib/slices/apiSlice";
 
@@ -367,13 +366,12 @@ export default function HeroPage() {
 
   const { data: pagesData, isLoading, error } = useGetPagesQuery();
   const [createPageHero, { isLoading: isCreating }] = useCreatePageHeroMutation();
-  const [replacePageHero, { isLoading: isReplacing }] = useReplacePageHeroMutation();
-  const [patchPageHero] = usePatchPageHeroMutation();
+  const [patchPageHero, { isLoading: isPatching }] = usePatchPageHeroMutation();
   const [deletePageHero] = useDeletePageHeroMutation();
 
   const pages = useMemo(() => sortPages(pagesData ?? []), [pagesData]);
   const flatPages = useMemo(() => flattenPages(pages), [pages]);
-  const isSaving = isCreating || isReplacing;
+  const isSaving = isCreating || isPatching;
 
   function openCreateHero(page: PageRecord) {
     setSelectedPage(page);
@@ -439,7 +437,8 @@ export default function HeroPage() {
       if (formMode === "create") {
         await createPageHero({ pageId: selectedPage.id, data: payload }).unwrap();
       } else {
-        await replacePageHero({ pageId: selectedPage.id, data: payload }).unwrap();
+        // Use PATCH for incremental edits (partial update)
+        await patchPageHero({ pageId: selectedPage.id, data: payload }).unwrap();
       }
 
       setMessage(`Hero ${formMode === "create" ? "created" : "updated"} for ${selectedPage.title}.`);
