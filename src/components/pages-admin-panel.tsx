@@ -938,7 +938,7 @@ export function PagesAdminPanel() {
               <section className="rounded-[28px] border border-white/70 bg-slate-950 px-5 py-5 text-slate-100 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-300">Workflow</p>
                 <div className="mt-4 grid gap-3 text-sm text-slate-300">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">1. Load the tree from GET /api/pages.</div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">1. Load the tree from your pages endpoint.</div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">2. Use the editor to create, edit, or nest pages.</div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">3. Save, delete, and refresh without leaving the screen.</div>
                 </div>

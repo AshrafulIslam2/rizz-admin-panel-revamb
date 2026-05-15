@@ -37,6 +37,49 @@ export interface FaqRecord {
   updated_at?: string;
 }
 
+export interface CategoryRecord {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  parent_id?: string | null;
+  is_active?: boolean;
+  is_featured?: boolean;
+  show_on_homepage?: boolean;
+  thumbnail_image?: string;
+  banner_image?: string;
+  seo_title?: string;
+  seo_description?: string;
+  order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateCategoryPayload {
+  name: string;
+  slug: string;
+  description?: string;
+  parent_id?: string;
+  is_active?: boolean;
+  is_featured?: boolean;
+  show_on_homepage?: boolean;
+  thumbnail_image?: string;
+  banner_image?: string;
+  seo_title?: string;
+  seo_description?: string;
+  order?: number;
+}
+
+export interface UpdateCategoryPayload {
+  id: string;
+  data: CreateCategoryPayload;
+}
+
+export interface PatchCategoryPayload {
+  id: string;
+  data: Partial<CreateCategoryPayload>;
+}
+
 interface PageRecord {
   id: PageId;
   title: string;
@@ -68,8 +111,43 @@ export const apiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Pages', 'Page', 'Hero', 'Faqs', 'Faq'],
+  tagTypes: ['Pages', 'Page', 'Hero', 'Faqs', 'Categories'],
   endpoints: (builder) => ({
+    getCategories: builder.query<CategoryRecord[], void>({
+      query: () => '/categories',
+      providesTags: ['Categories'],
+    }),
+    createCategory: builder.mutation<CategoryRecord, CreateCategoryPayload>({
+      query: (payload) => ({
+        url: '/categories',
+        method: 'POST',
+        body: payload,
+      }),
+      invalidatesTags: ['Categories'],
+    }),
+    replaceCategory: builder.mutation<CategoryRecord, UpdateCategoryPayload>({
+      query: ({ id, data }) => ({
+        url: `/categories/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Categories'],
+    }),
+    patchCategory: builder.mutation<CategoryRecord, PatchCategoryPayload>({
+      query: ({ id, data }) => ({
+        url: `/categories/${id}`,
+        method: 'PATCH',
+        body: data,
+      }),
+      invalidatesTags: ['Categories'],
+    }),
+    deleteCategory: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/categories/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Categories'],
+    }),
     // Get all pages
     getPages: builder.query<PageRecord[], void>({
       query: () => '/pages',
@@ -174,7 +252,7 @@ export const apiSlice = createApi({
 
     getPageFaq: builder.query<FaqRecord, { pageId: PageId; faqId: string }>({
       query: ({ pageId, faqId }) => `/pages/${pageId}/faqs/${faqId}`,
-      providesTags: ['Faq'],
+      providesTags: ['Faqs'],
     }),
 
     createPageFaq: builder.mutation<FaqRecord, { pageId: PageId; data: Partial<FaqRecord> }>({
@@ -192,7 +270,7 @@ export const apiSlice = createApi({
         method: 'PUT',
         body: data,
       }),
-      invalidatesTags: ['Faqs', 'Faq'],
+      invalidatesTags: ['Faqs', ],
     }),
 
     patchPageFaq: builder.mutation<FaqRecord, { pageId: PageId; faqId: string; data: Partial<FaqRecord> }>({
@@ -201,7 +279,7 @@ export const apiSlice = createApi({
         method: 'PATCH',
         body: data,
       }),
-      invalidatesTags: ['Faqs', 'Faq'],
+      invalidatesTags: ['Faqs', ],
     }),
 
     deletePageFaq: builder.mutation<void, { pageId: PageId; faqId: string }>({
@@ -209,13 +287,18 @@ export const apiSlice = createApi({
         url: `/pages/${pageId}/faqs/${faqId}`,
         method: 'DELETE',
       }),
-      invalidatesTags: ['Faqs', 'Faq'],
+      invalidatesTags: ['Faqs', ]
     }),
   }),
 });
 
 export const {
   useGetPagesQuery,
+  useGetCategoriesQuery,
+  useCreateCategoryMutation,
+  useReplaceCategoryMutation,
+  usePatchCategoryMutation,
+  useDeleteCategoryMutation,
   useCreatePageTreeMutation,
   useUpdatePageMutation,
   useDeletePageMutation,

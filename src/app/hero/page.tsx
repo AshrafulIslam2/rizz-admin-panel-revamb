@@ -599,9 +599,9 @@ export default function HeroPage() {
             <section className="rounded-[28px] border border-white/70 bg-slate-950 px-5 py-5 text-slate-100 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-teal-300">Flow</p>
               <div className="mt-4 grid gap-3 text-sm text-slate-300">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">1. GET /api/pages gives the full page tree.</div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">2. Each page checks its hero with GET /api/pages/:pageId/hero.</div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">3. Use POST, PUT, PATCH, and DELETE from the same screen.</div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">1. Load the full page tree from your backend.</div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">2. Each page checks its hero endpoint.</div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">3. Create, update, and delete hero data from the same screen.</div>
               </div>
             </section>
           </div>

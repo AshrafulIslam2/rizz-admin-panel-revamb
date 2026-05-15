@@ -35,6 +35,13 @@ export default function Sidebar() {
         </Link>
 
         <Link
+          href="/categories"
+          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
+        >
+          Categories
+        </Link>
+
+        <Link
           href="/settings"
           className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
         >
@@ -44,7 +51,7 @@ export default function Sidebar() {
 
       <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
         <p className="font-medium text-white">Backend connected</p>
-        <p className="mt-1 text-slate-400">GET, POST, PATCH, and DELETE all point at /api/pages.</p>
+        <p className="mt-1 text-slate-400">Hook this up to your pages endpoints.</p>
       </div>
     </aside>
   );
