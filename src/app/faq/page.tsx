@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { skipToken } from '@reduxjs/toolkit/query';
 import {
   useGetPagesQuery,
   useGetPageFaqsQuery,
@@ -65,10 +66,19 @@ export default function FaqPage() {
   const pages = useMemo(() => sortPages(pagesData ?? []), [pagesData]);
   const flatPages = useMemo(() => flattenPages(pages), [pages]);
 
-  const { data: faqsData } = useGetPageFaqsQuery(selectedPage?.id ?? '');
+  const { data: faqsData } = useGetPageFaqsQuery(selectedPage?.id ?? skipToken);
   const [createPageFaq, { isLoading: isCreating }] = useCreatePageFaqMutation();
   const [patchPageFaq, { isLoading: isPatching }] = usePatchPageFaqMutation();
   const [deletePageFaq] = useDeletePageFaqMutation();
+
+  function selectPage(page: PageRecord) {
+    setSelectedPage(page);
+    setSelectedFaq(null);
+    setShowForm(false);
+    setFormMode('create');
+    setDraft(INITIAL_DRAFT);
+    setMessage(null);
+  }
 
   function openCreate(page: PageRecord) {
     setSelectedPage(page);
@@ -90,7 +100,6 @@ export default function FaqPage() {
 
   function closeForm() {
     setShowForm(false);
-    setSelectedPage(null);
     setSelectedFaq(null);
     setDraft(INITIAL_DRAFT);
     setFormMode('create');
@@ -151,22 +160,21 @@ export default function FaqPage() {
                 <div>Loading pages...</div>
               ) : (
                 flatPages.map((page) => (
-                  <div key={page.id} style={{ marginLeft: page.depth * 16 }} className="rounded-xl border p-3 bg-slate-50">
-                    <div className="flex items-center justify-between">
+                  <div
+                    key={page.id}
+                    style={{ marginLeft: page.depth * 16 }}
+                    className={`rounded-xl border p-3 bg-slate-50 transition ${selectedPage?.id === page.id ? 'border-teal-300 ring-1 ring-teal-200' : ''}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="font-semibold">{page.title}</div>
                         <div className="text-sm text-slate-500">/{page.slug} — ID {page.id}</div>
                       </div>
                       <div className="flex gap-2">
+                        <button onClick={() => selectPage(page)} className="rounded-full border px-3 py-1 text-sm">View FAQs</button>
                         <button onClick={() => openCreate(page)} className="rounded-full border px-3 py-1 text-sm">Add FAQ</button>
                         <button onClick={() => router.push(`/faq/${page.id}`)} className="rounded-full border px-3 py-1 text-sm">View page</button>
                       </div>
-                    </div>
-                    <div className="mt-3">
-                      {/* show small list of faqs for this page */}
-                      {selectedPage?.id === page.id ? (
-                        <div className="text-sm text-slate-600">Selected</div>
-                      ) : null}
                     </div>
                   </div>
                 ))
@@ -175,6 +183,25 @@ export default function FaqPage() {
           </section>
 
           <div>
+            <section className="rounded-[28px] border bg-white p-5 mb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">Selected page</h3>
+                  <p className="text-sm text-slate-500">
+                    {selectedPage ? `${selectedPage.title} / ${selectedPage.slug}` : 'Select a page to view its FAQs.'}
+                  </p>
+                </div>
+                {selectedPage ? (
+                  <button
+                    onClick={() => setShowForm(true)}
+                    className="rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-900"
+                  >
+                    Create FAQ
+                  </button>
+                ) : null}
+              </div>
+            </section>
+
             {showForm ? (
               <FaqForm
                 pageTitle={selectedPage?.title ?? null}
@@ -195,20 +222,37 @@ export default function FaqPage() {
             <section className="mt-4 rounded-[28px] border bg-white p-4">
               <h4 className="font-semibold">Page FAQs</h4>
               <div className="mt-3 space-y-2">
-                {(faqsData?.faqs ?? []).map((faq) => (
-                  <div key={faq.id} className="rounded-md border p-3 bg-slate-50">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-semibold">{faq.question}</div>
-                        <div className="text-sm text-slate-600">{faq.short_answer}</div>
+                {selectedPage ? (
+                  (faqsData?.faqs ?? []).length > 0 ? (
+                    (faqsData?.faqs ?? []).map((faq) => (
+                      <div key={faq.id} className="rounded-md border p-3 bg-slate-50">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-semibold">{faq.question}</div>
+                            <div className="text-sm text-slate-600">{faq.short_answer}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => openEdit(selectedPage as PageRecord, faq)} className="rounded-full border px-3 py-1 text-sm">Edit</button>
+                            <button onClick={() => handleDelete(selectedPage as PageRecord, faq)} className="rounded-full border px-3 py-1 text-sm text-rose-600">Delete</button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => openEdit(selectedPage as PageRecord, faq)} className="rounded-full border px-3 py-1 text-sm">Edit</button>
-                        <button onClick={() => handleDelete(selectedPage as PageRecord, faq)} className="rounded-full border px-3 py-1 text-sm text-rose-600">Delete</button>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-md border border-dashed p-3 text-sm text-slate-500">
+                      <p>No FAQ found for this page.</p>
+                      <button
+                        type="button"
+                        onClick={() => openCreate(selectedPage)}
+                        className="mt-3 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-900"
+                      >
+                        Create FAQ
+                      </button>
                     </div>
-                  </div>
-                ))}
+                  )
+                ) : (
+                  <div className="rounded-md border border-dashed p-3 text-sm text-slate-500">Select a page to load its FAQs.</div>
+                )}
               </div>
             </section>
           </div>
