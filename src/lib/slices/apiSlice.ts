@@ -15,6 +15,28 @@ export interface HeroPayload {
   order: number;
 }
 
+export interface FaqRecord {
+  id: string;
+  pageId: PageId | string;
+  question: string;
+  answer: string;
+  short_answer?: string;
+  answer_type?: string;
+  intent_type?: string;
+  seo_title?: string;
+  seo_description?: string;
+  slug?: string;
+  schema_enabled?: boolean;
+  ai_summary?: string;
+  entity_tags?: string[];
+  source_url?: string;
+  fact_check_status?: string;
+  last_verified_at?: string;
+  context?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface PageRecord {
   id: PageId;
   title: string;
@@ -46,7 +68,7 @@ export const apiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Pages', 'Page', 'Hero'],
+  tagTypes: ['Pages', 'Page', 'Hero', 'Faqs', 'Faq'],
   endpoints: (builder) => ({
     // Get all pages
     getPages: builder.query<PageRecord[], void>({
@@ -133,6 +155,62 @@ export const apiSlice = createApi({
       query: (heroId) => `/hero/${heroId}`,
       providesTags: ['Hero'],
     }),
+
+    // Patch hero directly by hero ID (partial update)
+    patchHeroById: builder.mutation<HeroPayload, { heroId: PageId; data: Partial<HeroPayload> }>({
+      query: ({ heroId, data }) => ({
+        url: `/hero/${heroId}`,
+        method: 'PATCH',
+        body: data,
+      }),
+      invalidatesTags: ['Hero'],
+    }),
+
+    // FAQs for a page
+    getPageFaqs: builder.query<{ faqs: FaqRecord[]; jsonLd?: any }, PageId>({
+      query: (pageId) => `/pages/${pageId}/faqs`,
+      providesTags: ['Faqs'],
+    }),
+
+    getPageFaq: builder.query<FaqRecord, { pageId: PageId; faqId: string }>({
+      query: ({ pageId, faqId }) => `/pages/${pageId}/faqs/${faqId}`,
+      providesTags: ['Faq'],
+    }),
+
+    createPageFaq: builder.mutation<FaqRecord, { pageId: PageId; data: Partial<FaqRecord> }>({
+      query: ({ pageId, data }) => ({
+        url: `/pages/${pageId}/faqs`,
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Faqs'],
+    }),
+
+    replacePageFaq: builder.mutation<FaqRecord, { pageId: PageId; faqId: string; data: Partial<FaqRecord> }>({
+      query: ({ pageId, faqId, data }) => ({
+        url: `/pages/${pageId}/faqs/${faqId}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Faqs', 'Faq'],
+    }),
+
+    patchPageFaq: builder.mutation<FaqRecord, { pageId: PageId; faqId: string; data: Partial<FaqRecord> }>({
+      query: ({ pageId, faqId, data }) => ({
+        url: `/pages/${pageId}/faqs/${faqId}`,
+        method: 'PATCH',
+        body: data,
+      }),
+      invalidatesTags: ['Faqs', 'Faq'],
+    }),
+
+    deletePageFaq: builder.mutation<void, { pageId: PageId; faqId: string }>({
+      query: ({ pageId, faqId }) => ({
+        url: `/pages/${pageId}/faqs/${faqId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Faqs', 'Faq'],
+    }),
   }),
 });
 
@@ -147,4 +225,12 @@ export const {
   usePatchPageHeroMutation,
   useDeletePageHeroMutation,
   useGetHeroByIdQuery,
+  usePatchHeroByIdMutation,
+  useGetPageFaqsQuery,
+  useGetPageFaqQuery,
+  useCreatePageFaqMutation,
+  useReplacePageFaqMutation,
+  usePatchPageFaqMutation,
+  useDeletePageFaqMutation,
 } = apiSlice;
+
