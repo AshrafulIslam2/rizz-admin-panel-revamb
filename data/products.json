@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "name": "Rizz Pro Headset",
+    "price": 129.99,
+    "description": "High-fidelity wireless headset with noise cancellation.",
+    "image": "/images/headset.jpg"
+  },
+  {
+    "id": "2",
+    "name": "Rizz Flow Keyboard",
+    "price": 89.5,
+    "description": "Mechanical keyboard with customizable RGB and low-profile switches.",
+    "image": "/images/keyboard.jpg"
+  },
+  {
+    "id": "3",
+    "name": "Rizz Mini Mouse",
+    "price": 39.99,
+    "description": "Compact ergonomic mouse with long battery life.",
+    "image": "/images/mouse.jpg"
+  }
+]
