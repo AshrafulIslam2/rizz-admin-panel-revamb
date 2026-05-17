@@ -20,6 +20,25 @@ export default function Sidebar() {
           Pages
         </Link>
 
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
+          <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Catalog</p>
+          <div className="space-y-1">
+            <Link
+              href="/products"
+              className="flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-emerald-300/40 hover:bg-emerald-500/15"
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+              Products
+            </Link>
+            <Link
+              href="/admin/products/new"
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
+            >
+              Create Product
+            </Link>
+          </div>
+        </div>
+
         <Link
           href="/hero"
           className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
