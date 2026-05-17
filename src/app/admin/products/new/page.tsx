@@ -111,6 +111,8 @@ export default function NewProductPage() {
   const [variantSuccess, setVariantSuccess] = useState<string | null>(null)
   const [mediaUploading, setMediaUploading] = useState(false)
   const [mediaError, setMediaError] = useState<string | null>(null)
+  const [mediaSaving, setMediaSaving] = useState(false)
+  const [mediaSuccess, setMediaSuccess] = useState<string | null>(null)
   const mediaCount = Array.isArray(form.images) ? form.images.length : 0
   const completionSteps = [form.name, form.slug, form.category_id, form.seo.meta_title, form.seo.meta_description]
   const completion = Math.round((completionSteps.filter(Boolean).length / completionSteps.length) * 100)
@@ -384,6 +386,20 @@ export default function NewProductPage() {
     return data
   }
 
+  function getMediaDraft() {
+    return Array.isArray(form.images) && form.images[0] ? form.images[0] : null
+  }
+
+  function updateMediaDraft(key: string, value: any) {
+    setForm((s: any) => {
+      const current = Array.isArray(s.images) && s.images[0] ? s.images[0] : {}
+      return {
+        ...s,
+        images: [{ ...current, [key]: value }],
+      }
+    })
+  }
+
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files) return
@@ -403,34 +419,21 @@ export default function NewProductPage() {
       }
 
       const uploaded = await uploadMediaFile(file)
-      const media = await saveProductMedia(productId, {
-        media_type: 'IMAGE',
-        media_url: uploaded.media_url,
-        thumbnail_url: uploaded.thumbnail_url || uploaded.media_url,
-        alt_text: file.name,
-        title: file.name,
-        sort_order: 1,
-        is_primary: true,
-        is_featured: false,
-        status: 'ACTIVE',
-        variant_id: null,
-      })
-
-      const savedMedia = media?.data ?? media
+      setMediaSuccess(null)
       setForm((s: any) => ({
         ...s,
         images: [
           {
-            media_type: savedMedia?.media_type || 'IMAGE',
-            media_url: savedMedia?.media_url || uploaded.media_url,
-            thumbnail_url: savedMedia?.thumbnail_url || uploaded.thumbnail_url || uploaded.media_url,
-            alt_text: savedMedia?.alt_text || file.name,
-            title: savedMedia?.title || file.name,
-            sort_order: savedMedia?.sort_order ?? 1,
-            is_primary: Boolean(savedMedia?.is_primary ?? true),
-            is_featured: Boolean(savedMedia?.is_featured ?? false),
-            status: savedMedia?.status || 'ACTIVE',
-            variant_id: savedMedia?.variant_id ?? null,
+            media_type: 'IMAGE',
+            media_url: uploaded.media_url,
+            thumbnail_url: uploaded.thumbnail_url || uploaded.media_url,
+            alt_text: '',
+            title: '',
+            sort_order: 1,
+            is_primary: true,
+            is_featured: false,
+            status: 'DRAFT',
+            variant_id: null,
           },
         ],
       }))
@@ -439,6 +442,65 @@ export default function NewProductPage() {
     } finally {
       setMediaUploading(false)
       input.value = ''
+    }
+  }
+
+  async function handleSaveMedia() {
+    const productId = form.product_id?.trim()
+    const media = getMediaDraft()
+
+    setMediaError(null)
+    setMediaSuccess(null)
+
+    if (!productId) {
+      setMediaError('Product ID is required before saving media.')
+      return
+    }
+
+    if (!media?.media_url) {
+      setMediaError('Upload an image first.')
+      return
+    }
+
+    setMediaSaving(true)
+    try {
+      const payload = {
+        media_type: media.media_type || 'IMAGE',
+        media_url: media.media_url,
+        thumbnail_url: media.thumbnail_url || media.media_url,
+        alt_text: media.alt_text || '',
+        title: media.title || '',
+        sort_order: media.sort_order ? Number(media.sort_order) : 1,
+        is_primary: Boolean(media.is_primary),
+        is_featured: Boolean(media.is_featured),
+        status: media.status || 'DRAFT',
+        variant_id: media.variant_id || null,
+      }
+
+      const saved = await saveProductMedia(productId, payload)
+      const savedMedia = saved?.data ?? saved
+      setForm((s: any) => ({
+        ...s,
+        images: [
+          {
+            media_type: savedMedia?.media_type || payload.media_type,
+            media_url: savedMedia?.media_url || payload.media_url,
+            thumbnail_url: savedMedia?.thumbnail_url || payload.thumbnail_url,
+            alt_text: savedMedia?.alt_text ?? payload.alt_text,
+            title: savedMedia?.title ?? payload.title,
+            sort_order: savedMedia?.sort_order ?? payload.sort_order,
+            is_primary: Boolean(savedMedia?.is_primary ?? payload.is_primary),
+            is_featured: Boolean(savedMedia?.is_featured ?? payload.is_featured),
+            status: savedMedia?.status || payload.status,
+            variant_id: savedMedia?.variant_id ?? payload.variant_id,
+          },
+        ],
+      }))
+      setMediaSuccess('Media saved successfully.')
+    } catch (err: any) {
+      setMediaError(err?.message || 'Failed to save media')
+    } finally {
+      setMediaSaving(false)
     }
   }
 
@@ -857,131 +919,119 @@ export default function NewProductPage() {
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
                 <div className="text-sm font-semibold text-slate-900">Media upload</div>
                 <input type="file" accept="image/*" onChange={handleFiles} className="block" />
-                <p className="text-xs text-slate-500 mt-1">Image uploads come back from ImageBB and are saved into media_url and thumbnail_url.</p>
+                <p className="text-xs text-slate-500 mt-1">Image uploads fill only Media URL and Thumbnail URL from ImageBB. Save the rest manually, then click Save Media.</p>
                 {mediaUploading && <p className="text-xs text-slate-600 mt-2">Uploading media...</p>}
                 {mediaError && <p className="text-xs text-rose-600 mt-2">{mediaError}</p>}
+                {mediaSuccess && <p className="text-xs text-emerald-600 mt-2">{mediaSuccess}</p>}
               </div>
 
-              <div className="grid gap-3">
-                {!form.images || form.images.length === 0 ? (
-                  <p className="text-sm text-slate-500">No media added yet.</p>
-                ) : (
-                  form.images.map((m: any, idx: number) => (
-                    <div key={idx} className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 lg:grid-cols-[140px_minmax(0,1fr)_auto]">
-                      <div className="space-y-2">
-                        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Preview</div>
-                        <div className="w-full h-28 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-                        {m.media_type === 'VIDEO' ? (
-                          <video src={m.media_url} className="object-cover w-full h-full" controls />
-                        ) : (
-                          <img src={m.thumbnail_url || m.media_url} alt={m.alt_text} className="object-cover w-full h-full" />
-                        )}
-                      </div>
-                      </div>
+              {!getMediaDraft() ? (
+                <p className="text-sm text-slate-500">Upload one image to start the media draft.</p>
+              ) : (
+                <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 lg:grid-cols-[140px_minmax(0,1fr)_auto]">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Preview</div>
+                    <div className="w-full h-28 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
+                      <img src={getMediaDraft()?.thumbnail_url || getMediaDraft()?.media_url} alt="Media preview" className="object-cover w-full h-full" />
+                    </div>
+                  </div>
 
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Media details</div>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Media type</span>
-                            <select
-                              value={m.media_type || 'IMAGE'}
-                              onChange={(e) => updateImageField(idx, 'media_type', e.target.value)}
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            >
-                              <option value="IMAGE">IMAGE</option>
-                              <option value="VIDEO">VIDEO</option>
-                            </select>
-                          </label>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Media URL</span>
-                            <input
-                              value={m.media_url || ''}
-                              onChange={(e) => updateImageField(idx, 'media_url', e.target.value)}
-                              placeholder="Media URL"
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            />
-                          </label>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Thumbnail URL</span>
-                            <input
-                              value={m.thumbnail_url || ''}
-                              onChange={(e) => updateImageField(idx, 'thumbnail_url', e.target.value)}
-                              placeholder="Thumbnail URL"
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            />
-                          </label>
-                        </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Media source</div>
+                      <label className="block space-y-1">
+                        <span className="text-xs text-slate-600">Media URL</span>
+                        <input
+                          value={getMediaDraft()?.media_url || ''}
+                          readOnly
+                          className="block w-full px-3 py-2 border rounded-md bg-slate-100 text-slate-600"
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs text-slate-600">Thumbnail URL</span>
+                        <input
+                          value={getMediaDraft()?.thumbnail_url || ''}
+                          readOnly
+                          className="block w-full px-3 py-2 border rounded-md bg-slate-100 text-slate-600"
+                        />
+                      </label>
+                    </div>
 
-                        <div className="space-y-2">
-                          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Content and state</div>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Title</span>
-                            <input
-                              value={m.title || ''}
-                              onChange={(e) => updateImageField(idx, 'title', e.target.value)}
-                              placeholder="Title"
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            />
-                          </label>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Alt text</span>
-                            <input
-                              value={m.alt_text || ''}
-                              onChange={(e) => updateImageField(idx, 'alt_text', e.target.value)}
-                              placeholder="Alt text"
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            />
-                          </label>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <label className="block space-y-1">
-                              <span className="text-xs text-slate-600">Sort order</span>
-                              <input
-                                type="number"
-                                value={m.sort_order ?? idx + 1}
-                                onChange={(e) => updateImageField(idx, 'sort_order', Number(e.target.value))}
-                                className="block w-full px-3 py-2 border rounded-md bg-white"
-                              />
-                            </label>
-                            <label className="block space-y-1">
-                              <span className="text-xs text-slate-600">Status</span>
-                              <select value={m.status || 'ACTIVE'} onChange={(e) => updateImageField(idx, 'status', e.target.value)} className="block w-full px-3 py-2 border rounded-md bg-white">
-                                <option value="ACTIVE">Active</option>
-                                <option value="INACTIVE">Inactive</option>
-                              </select>
-                            </label>
-                          </div>
-                          <label className="block space-y-1">
-                            <span className="text-xs text-slate-600">Variant ID</span>
-                            <input
-                              value={m.variant_id ?? ''}
-                              onChange={(e) => updateImageField(idx, 'variant_id', e.target.value || null)}
-                              placeholder="Variant ID"
-                              className="block w-full px-3 py-2 border rounded-md bg-white"
-                            />
-                          </label>
-                          <div className="flex flex-wrap gap-4 pt-1">
-                            <label className="flex items-center gap-2">
-                              <input type="radio" name="primary" checked={m.is_primary} onChange={() => setPrimary(idx)} className="h-4 w-4" />
-                              <span className="text-sm">Primary</span>
-                            </label>
-                            <label className="flex items-center gap-2">
-                              <input type="checkbox" checked={m.is_featured} onChange={(e) => updateImageField(idx, 'is_featured', e.target.checked)} className="h-4 w-4" />
-                              <span className="text-sm">Featured</span>
-                            </label>
-                          </div>
-                        </div>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Manual fields</div>
+                      <label className="block space-y-1">
+                        <span className="text-xs text-slate-600">Title</span>
+                        <input
+                          value={getMediaDraft()?.title || ''}
+                          onChange={(e) => updateMediaDraft('title', e.target.value)}
+                          placeholder="Title"
+                          className="block w-full px-3 py-2 border rounded-md bg-white"
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs text-slate-600">Alt text</span>
+                        <input
+                          value={getMediaDraft()?.alt_text || ''}
+                          onChange={(e) => updateMediaDraft('alt_text', e.target.value)}
+                          placeholder="Alt text"
+                          className="block w-full px-3 py-2 border rounded-md bg-white"
+                        />
+                      </label>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className="block space-y-1">
+                          <span className="text-xs text-slate-600">Sort order</span>
+                          <input
+                            type="number"
+                            value={getMediaDraft()?.sort_order ?? 1}
+                            onChange={(e) => updateMediaDraft('sort_order', Number(e.target.value))}
+                            className="block w-full px-3 py-2 border rounded-md bg-white"
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-xs text-slate-600">Status</span>
+                          <select
+                            value={getMediaDraft()?.status || 'DRAFT'}
+                            onChange={(e) => updateMediaDraft('status', e.target.value)}
+                            className="block w-full px-3 py-2 border rounded-md bg-white"
+                          >
+                            <option value="DRAFT">DRAFT</option>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="ARCHIVED">ARCHIVED</option>
+                          </select>
+                        </label>
                       </div>
-
-                      <div className="flex flex-row gap-2 lg:flex-col lg:justify-start">
-                        <button type="button" onClick={() => moveImage(idx, -1)} className="px-3 py-2 rounded-md border text-sm">Up</button>
-                        <button type="button" onClick={() => moveImage(idx, 1)} className="px-3 py-2 rounded-md border text-sm">Down</button>
-                        <button type="button" onClick={() => removeImage(idx)} className="px-3 py-2 rounded-md border text-sm text-rose-600">Remove</button>
+                      <label className="block space-y-1">
+                        <span className="text-xs text-slate-600">Variant ID</span>
+                        <input
+                          value={getMediaDraft()?.variant_id ?? ''}
+                          onChange={(e) => updateMediaDraft('variant_id', e.target.value || null)}
+                          placeholder="Variant ID"
+                          className="block w-full px-3 py-2 border rounded-md bg-white"
+                        />
+                      </label>
+                      <div className="flex flex-wrap gap-4 pt-1">
+                        <label className="flex items-center gap-2">
+                          <input type="radio" name="primary" checked={Boolean(getMediaDraft()?.is_primary)} onChange={() => updateMediaDraft('is_primary', true)} className="h-4 w-4" />
+                          <span className="text-sm">Primary</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={Boolean(getMediaDraft()?.is_featured)} onChange={(e) => updateMediaDraft('is_featured', e.target.checked)} className="h-4 w-4" />
+                          <span className="text-sm">Featured</span>
+                        </label>
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+
+                  <div className="flex flex-row gap-2 lg:flex-col lg:justify-start">
+                    <button type="button" onClick={handleSaveMedia} className={primaryButton} disabled={mediaSaving}>
+                      {mediaSaving ? 'Saving...' : 'Save Media'}
+                    </button>
+                    <button type="button" onClick={() => setForm((s: any) => ({ ...s, images: [] }))} className={secondaryButton}>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
