@@ -170,6 +170,7 @@ export default function NewProductPage() {
       materials: toList(form.materials),
       use_cases: toList(form.use_cases),
       benefits: toList(form.benefits),
+      // specifications and how_to_use intentionally omitted (backend rejects these properties)
       brand_id: form.brand_id,
       category_id: form.category_id,
       status: form.status,
@@ -738,6 +739,7 @@ export default function NewProductPage() {
                 <div className="text-sm font-medium mb-1">Benefits (one per line)</div>
                 <textarea value={form.benefits} onChange={(e) => update('benefits', e.target.value)} className="block w-full px-3 py-2 border rounded-md bg-white" />
               </label>
+              
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="block">
@@ -763,6 +765,55 @@ export default function NewProductPage() {
                 <textarea
                   value={form.seo.meta_description}
                   onChange={(e) => updateSeo('meta_description', e.target.value)}
+                  className="block w-full px-3 py-2 border rounded-md bg-white"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="block">
+                  <div className="text-sm font-medium mb-1">Meta keywords (comma separated)</div>
+                  <input
+                    value={form.seo.meta_keywords}
+                    onChange={(e) => updateSeo('meta_keywords', e.target.value)}
+                    className="block w-full px-3 py-2 border rounded-md bg-white"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-sm font-medium mb-1">Canonical URL</div>
+                  <input
+                    value={form.seo.canonical_url}
+                    onChange={(e) => updateSeo('canonical_url', e.target.value)}
+                    placeholder="https://example.com/product/classic-sneakers"
+                    className="block w-full px-3 py-2 border rounded-md bg-white"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="block">
+                  <div className="text-sm font-medium mb-1">OG Title</div>
+                  <input
+                    value={form.seo.og_title}
+                    onChange={(e) => updateSeo('og_title', e.target.value)}
+                    className="block w-full px-3 py-2 border rounded-md bg-white"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-sm font-medium mb-1">OG Image URL</div>
+                  <input
+                    value={form.seo.og_image}
+                    onChange={(e) => updateSeo('og_image', e.target.value)}
+                    placeholder="https://cdn.example.com/og-image.jpg"
+                    className="block w-full px-3 py-2 border rounded-md bg-white"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <div className="text-sm font-medium mb-1">OG description</div>
+                <textarea
+                  value={form.seo.og_description}
+                  onChange={(e) => updateSeo('og_description', e.target.value)}
                   className="block w-full px-3 py-2 border rounded-md bg-white"
                 />
               </label>
