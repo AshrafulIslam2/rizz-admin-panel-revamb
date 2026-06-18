@@ -1,76 +1,110 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const NAV = [
+  {
+    label: "Dashboard",
+    href: "/",
+    icon: "⊞",
+  },
+  {
+    section: "Commerce",
+    items: [
+      { label: "Orders", href: "/orders", icon: "◫" },
+      { label: "Products", href: "/products", icon: "◻" },
+      { label: "Categories", href: "/categories", icon: "◈" },
+      { label: "Reviews", href: "/reviews", icon: "◇" },
+      { label: "Campaigns", href: "/campaigns", icon: "◆" },
+    ],
+  },
+  {
+    section: "Content",
+    items: [
+      { label: "Homepage", href: "/homepage", icon: "⬡" },
+      { label: "About", href: "/about", icon: "◎" },
+      { label: "Policies", href: "/policies", icon: "◉" },
+      { label: "FAQ", href: "/faq", icon: "◌" },
+      { label: "SEO", href: "/seo", icon: "◑" },
+    ],
+  },
+  {
+    section: "Settings",
+    items: [
+      { label: "Branding & Contact", href: "/branding", icon: "◐" },
+    ],
+  },
+];
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
+  function isActive(href: string) {
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  }
+
   return (
-    <aside className="hidden w-72 flex-col border-r border-white/70 bg-slate-950/95 px-5 py-6 text-slate-100 shadow-[0_0_60px_rgba(15,23,42,0.18)] lg:flex">
-      <div className="space-y-1 border-b border-white/10 pb-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-300">RIZZ Admin</p>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">Content manager</h1>
-        <p className="text-sm text-slate-400">A minimal workspace for nested page management.</p>
+    <aside className="hidden w-64 shrink-0 flex-col bg-slate-950 lg:flex">
+      <div className="border-b border-white/10 px-5 py-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-teal-400">RIZZ Admin</p>
+        <h1 className="mt-1 text-lg font-semibold text-white">Control Panel</h1>
       </div>
 
-      <nav className="mt-6 space-y-2">
-        <Link
-          href="/"
-          className="flex items-center gap-3 rounded-2xl border border-teal-400/20 bg-teal-500/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-teal-300/40 hover:bg-teal-500/15"
-        >
-          <span className="h-2.5 w-2.5 rounded-full bg-teal-300" />
-          Pages
-        </Link>
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {NAV.map((item, i) => {
+          if ("href" in item && item.href) {
+            return (
+              <Link
+                key={item.href as string}
+                href={item.href as string}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  isActive(item.href as string)
+                    ? "bg-white/15 text-white"
+                    : "text-white/70 hover:bg-white/8 hover:text-white"
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          }
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
-          <p className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Catalog</p>
-          <div className="space-y-1">
-            <Link
-              href="/products"
-              className="flex items-center gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-emerald-300/40 hover:bg-emerald-500/15"
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
-              Products
-            </Link>
-            <Link
-              href="/admin/products/new"
-              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
-            >
-              Create Product
-            </Link>
-          </div>
-        </div>
-
-        <Link
-          href="/hero"
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
-        >
-          Hero
-        </Link>
-
-        <Link
-          href="/faq"
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
-        >
-          FAQ
-        </Link>
-
-        <Link
-          href="/categories"
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
-        >
-          Categories
-        </Link>
-
-        <Link
-          href="/settings"
-          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-white/20"
-        >
-          Settings
-        </Link>
+          return (
+            <div key={item.section} className={i > 0 ? "mt-4" : ""}>
+              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+                {item.section}
+              </p>
+              {(item.items ?? []).map((sub) => (
+                <Link
+                  key={sub.href}
+                  href={sub.href}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                    isActive(sub.href)
+                      ? "bg-white/15 text-white"
+                      : "text-white/70 hover:bg-white/8 hover:text-white"
+                  }`}
+                >
+                  <span className="text-base">{sub.icon}</span>
+                  {sub.label}
+                </Link>
+              ))}
+            </div>
+          );
+        })}
       </nav>
 
-      <div className="mt-auto rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-        <p className="font-medium text-white">Backend connected</p>
-        <p className="mt-1 text-slate-400">Hook this up to your pages endpoints.</p>
+      <div className="border-t border-white/10 px-5 py-4">
+        <p className="text-xs text-slate-500">RIZZ Leather · Chittagong</p>
+        <a
+          href="http://localhost:3000"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 text-xs text-teal-400 hover:text-teal-300 transition"
+        >
+          View storefront →
+        </a>
       </div>
     </aside>
   );

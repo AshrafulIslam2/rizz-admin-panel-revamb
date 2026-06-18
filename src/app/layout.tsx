@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pages Admin",
-  description: "Minimal admin panel for nested page management.",
+  title: "RIZZ Admin",
+  description: "RIZZ Leather — Admin control panel.",
 };
 
 export default function RootLayout({

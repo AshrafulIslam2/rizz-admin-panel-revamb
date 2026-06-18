@@ -42,57 +42,67 @@ const EMPTY_DRAFT: CreateCategoryDraft = {
 const CATEGORIES = [
   {
     id: "cat-01",
-    name: "Onboarding",
-    slug: "onboarding",
-    description: "First-time user flows and entrypoint content.",
+    name: "Men's Loafers",
+    slug: "mens-loafers",
+    description: "Full-grain leather loafers handcrafted in Chittagong.",
     parent_id: null,
     is_active: true,
-    seo_title: "Onboarding",
-    seo_description: "New user content category",
+    is_featured: true,
+    show_on_homepage: true,
+    seo_title: "Men's Leather Loafers | RIZZ",
+    seo_description: "Handcrafted genuine leather loafers for men. Made in Bangladesh.",
     order: 1,
   },
   {
     id: "cat-02",
-    name: "Billing",
-    slug: "billing",
-    description: "Payments, invoices, and subscription changes.",
+    name: "Men's Sandals",
+    slug: "mens-sandals",
+    description: "Premium leather sandals — casual and formal styles.",
     parent_id: null,
     is_active: true,
-    seo_title: "Billing",
-    seo_description: "Billing support category",
+    is_featured: true,
+    show_on_homepage: true,
+    seo_title: "Men's Leather Sandals | RIZZ",
+    seo_description: "Genuine leather sandals for men, made in Chittagong.",
     order: 2,
   },
   {
     id: "cat-03",
-    name: "Account",
-    slug: "account",
-    description: "Profile settings, security, and login recovery.",
+    name: "Men's Belts",
+    slug: "mens-belts",
+    description: "Full-grain leather belts with brass hardware.",
     parent_id: null,
     is_active: true,
-    seo_title: "Account",
-    seo_description: "Account settings category",
+    is_featured: false,
+    show_on_homepage: false,
+    seo_title: "Men's Leather Belts | RIZZ",
+    seo_description: "Genuine leather belts handcrafted in Bangladesh.",
     order: 3,
   },
   {
     id: "cat-04",
-    name: "Operations",
-    slug: "operations",
-    description: "Back-office workflows and internal playbooks.",
-    parent_id: "cat-01",
-    is_active: false,
-    seo_title: "Operations",
-    seo_description: "Internal operations category",
+    name: "Men's Wallets",
+    slug: "mens-wallets",
+    description: "Slim and bifold leather wallets.",
+    parent_id: null,
+    is_active: true,
+    is_featured: false,
+    show_on_homepage: false,
+    seo_title: "Men's Leather Wallets | RIZZ",
+    seo_description: "Slim genuine leather wallets made in Chittagong.",
     order: 4,
   },
   {
     id: "cat-05",
-    name: "Releases",
-    slug: "releases",
-    description: "Product updates and rollout guidance.",
+    name: "Men's Half Loafers",
+    slug: "mens-half-loafers",
+    description: "Open-back slip-on loafers — comfort meets craft.",
     parent_id: null,
-    is_active: false,
-    seo_title: "Releases",
-    seo_description: "Release notes category",
+    is_active: true,
+    is_featured: false,
+    show_on_homepage: false,
+    seo_title: "Men's Half Loafers | RIZZ",
+    seo_description: "Leather half loafers handcrafted in Bangladesh.",
     order: 5,
   },
 ];
@@ -210,10 +220,10 @@ export default function CategoriesPage() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.08),_transparent_55%),linear-gradient(180deg,_#ffffff,_#f8fafc)] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <header className="rounded-[32px] border border-white/70 bg-slate-950 p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-teal-300">Global categories</p>
-          <h1 className="mt-2 text-3xl font-semibold">Categories overview</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-teal-400">Commerce</p>
+          <h1 className="mt-2 text-3xl font-semibold">Product Categories</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-300">
-            Organize content collections that power your pages, FAQs, and hero copy.
+            Manage RIZZ product categories — loafers, sandals, belts, wallets, and accessories.
           </p>
         </header>
 

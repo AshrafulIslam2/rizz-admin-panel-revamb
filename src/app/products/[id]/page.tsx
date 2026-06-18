@@ -101,11 +101,18 @@ export default async function ProductPage({ params }: PageProps) {
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-10">
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <Link href="/products" className="text-sm text-slate-500 hover:text-slate-900">← Back to products</Link>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${product.status === "active" ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-600"}`}>
+          {product.status ?? "draft"}
+        </span>
+      </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-slate-900">{product.name ?? "Untitled Product"}</h1>
+        {product.sku && <p className="text-sm text-slate-500 mt-1">SKU: {product.sku}</p>}
       </div>
 
-      <ProductTabs product={product} />
+      <ProductTabs productId={String(product.id)} initialData={product as Record<string, unknown>} />
     </main>
   )
 }

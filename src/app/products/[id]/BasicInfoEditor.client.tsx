@@ -47,7 +47,6 @@ export default function BasicInfoEditor({ product, productId }: Props) {
     age_group: product.age_group || '',
     material: product.material || '',
     tax_class: product.tax_class || '',
-    faq_json: product.faq_json ? (typeof product.faq_json === 'string' ? product.faq_json : JSON.stringify(product.faq_json, null, 2)) : '',
     specifications: product.specifications ? (typeof product.specifications === 'string' ? product.specifications : JSON.stringify(product.specifications, null, 2)) : '',
     how_to_use: product.how_to_use || '',
     problem_solved: product.problem_solved || '',
@@ -139,34 +138,61 @@ export default function BasicInfoEditor({ product, productId }: Props) {
   async function handleSave() {
     setSaving(true)
     try {
-      const payload: any = {
-        sku: form.sku,
-        name: form.name,
-        slug: form.slug,
-        short_description: form.short_description,
-        description: form.description,
-        key_features: parseArrayInput(form.key_features),
-        materials: parseArrayInput(form.materials),
-        specifications: parseJsonField(form.specifications),
-        use_cases: parseArrayInput(form.use_cases),
-        how_to_use: form.how_to_use || null,
-        benefits: parseArrayInput(form.benefits),
-        problem_solved: form.problem_solved || null,
-        brand_id: form.brand_id,
-        category_id: form.category_id,
-        status: form.status,
-        is_featured: !!form.is_featured,
-        is_published: !!form.is_published,
-        tags: parseArrayInput(form.tags),
-        gender: form.gender,
-        age_group: form.age_group,
-        material: form.material,
-        tax_class: form.tax_class,
-        weight: form.weight === '' ? null : Number(form.weight),
-        length: form.length === '' ? null : Number(form.length),
-        width: form.width === '' ? null : Number(form.width),
-        height: form.height === '' ? null : Number(form.height),
+      const payload: any = {}
+
+      function setIfProvided(key: string, value: any) {
+        if (value !== undefined) payload[key] = value
       }
+
+      setIfProvided('sku', form.sku || undefined)
+      setIfProvided('name', form.name || undefined)
+      setIfProvided('slug', form.slug || undefined)
+      setIfProvided('short_description', form.short_description || undefined)
+      setIfProvided('description', form.description || undefined)
+      setIfProvided('key_features', parseArrayInput(form.key_features).length ? parseArrayInput(form.key_features) : undefined)
+      setIfProvided('materials', parseArrayInput(form.materials).length ? parseArrayInput(form.materials) : undefined)
+
+      // specifications: accept valid JSON object/array, `null` to clear, or omit when empty
+      const rawSpecs = (form.specifications || '').trim()
+      if (rawSpecs === '') {
+        // omit -> keep current value
+      } else if (rawSpecs.toLowerCase() === 'null') {
+        payload.specifications = null
+      } else {
+        try {
+          const parsed = JSON.parse(rawSpecs)
+          if (typeof parsed === 'object' && parsed !== null) {
+            payload.specifications = parsed
+          } else {
+            alert('`specifications` must be a JSON object/array or `null` to clear')
+            setSaving(false)
+            return
+          }
+        } catch {
+          alert('`specifications` must be valid JSON (object or array) or the literal `null`')
+          setSaving(false)
+          return
+        }
+      }
+
+      setIfProvided('use_cases', parseArrayInput(form.use_cases).length ? parseArrayInput(form.use_cases) : undefined)
+      setIfProvided('how_to_use', form.how_to_use === '' ? undefined : (form.how_to_use || null))
+      setIfProvided('benefits', parseArrayInput(form.benefits).length ? parseArrayInput(form.benefits) : undefined)
+      setIfProvided('problem_solved', form.problem_solved === '' ? undefined : (form.problem_solved || null))
+      setIfProvided('brand_id', form.brand_id || undefined)
+      setIfProvided('category_id', form.category_id || undefined)
+      setIfProvided('status', form.status || undefined)
+      setIfProvided('is_featured', typeof form.is_featured === 'boolean' ? !!form.is_featured : undefined)
+      setIfProvided('is_published', typeof form.is_published === 'boolean' ? !!form.is_published : undefined)
+      setIfProvided('tags', parseArrayInput(form.tags).length ? parseArrayInput(form.tags) : undefined)
+      setIfProvided('gender', form.gender || undefined)
+      setIfProvided('age_group', form.age_group || undefined)
+      setIfProvided('material', form.material || undefined)
+      setIfProvided('tax_class', form.tax_class || undefined)
+      setIfProvided('weight', form.weight === '' ? undefined : (form.weight === null ? null : Number(form.weight)))
+      setIfProvided('length', form.length === '' ? undefined : (form.length === null ? null : Number(form.length)))
+      setIfProvided('width', form.width === '' ? undefined : (form.width === null ? null : Number(form.width)))
+      setIfProvided('height', form.height === '' ? undefined : (form.height === null ? null : Number(form.height)))
 
       const base = process.env.NEXT_PUBLIC_API_URL || ''
       const url = base ? `${base.replace(/\/$/, '')}/products/${productId}/basic-info` : `/api/products/${productId}/basic-info`
@@ -399,10 +425,7 @@ export default function BasicInfoEditor({ product, productId }: Props) {
             <input type="number" step="any" className="mt-1 w-full rounded-md border px-3 py-2" value={form.height} onChange={(e) => updateField('height', e.target.value)} />
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="text-xs uppercase tracking-wide text-slate-500">FAQ JSON (optional, JSON text)</label>
-            <textarea className="mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs" rows={6} value={form.faq_json} onChange={(e) => updateField('faq_json', e.target.value)} />
-          </div>
+          
 
           <div className="sm:col-span-2">
             <label className="text-xs uppercase tracking-wide text-slate-500">Specifications (optional, JSON text)</label>
