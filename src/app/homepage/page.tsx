@@ -14,6 +14,7 @@ const TABS = [
   { id: "materials",  label: "Materials" },
   { id: "quote",      label: "Quote" },
   { id: "cta",        label: "CTA Banner" },
+  { id: "factory",    label: "Factory & Quality Page" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -21,6 +22,49 @@ function Msg({ text, ok = true }: { text: string; ok?: boolean }) {
   return (
     <div className={`rounded-xl border px-4 py-2.5 text-sm ${ok ? "border-teal-200 bg-teal-50 text-teal-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
       {text}
+    </div>
+  );
+}
+
+async function uploadToCloudinary(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`${API}/uploads`, { method: "POST", body: form });
+  if (!r.ok) throw new Error(`Upload failed → ${r.status}`);
+  const data = await r.json();
+  return data.url;
+}
+
+function ImageUploadField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true); setError(null);
+    try {
+      const url = await uploadToCloudinary(file);
+      onChange(url);
+    } catch {
+      setError("Upload failed. Check API.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className={lbl}>{label}</p>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://... or upload below" className={field} />
+      <div className="flex items-center gap-3">
+        <label className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition">
+          {uploading ? "Uploading…" : "↑ Upload Image"}
+          <input type="file" accept="image/*" onChange={handleFile} disabled={uploading} className="hidden" />
+        </label>
+        {error && <span className="text-xs text-rose-600">{error}</span>}
+      </div>
     </div>
   );
 }
@@ -96,10 +140,7 @@ function HeroTab() {
         </div>
       </div>
 
-      <div>
-        <p className={lbl}>Background Image URL</p>
-        <input value={form.image} onChange={(e) => set("image", e.target.value)} placeholder="/assets/images/rizzslide.jpg" className={field} />
-      </div>
+      <ImageUploadField label="Background Image URL" value={form.image} onChange={(url) => set("image", url)} />
       <div>
         <p className={lbl}>Location Tag</p>
         <input value={form.location_tag} onChange={(e) => set("location_tag", e.target.value)} placeholder="Chittagong · Bangladesh" className={field} />
@@ -265,10 +306,7 @@ function EditorialTab() {
         </div>
       </div>
 
-      <div>
-        <p className={lbl}>Image URL</p>
-        <input value={form.image} onChange={(e) => set("image", e.target.value)} className={field} />
-      </div>
+      <ImageUploadField label="Image URL" value={form.image} onChange={(url) => set("image", url)} />
       <div>
         <p className={lbl}>Tag (small label above headline)</p>
         <input value={form.tag} onChange={(e) => set("tag", e.target.value)} placeholder="The Signature" className={field} />
@@ -300,32 +338,41 @@ function EditorialTab() {
 
 // ─── Materials ────────────────────────────────────────────────────────────────
 
-const MATERIALS_DEFAULT = [
-  { label: "Full-Grain Calfskin", desc: "The pinnacle of leather. Natural texture, unmatched durability." },
-  { label: "Premium Suede", desc: "Velvety nap, rich depth. For the discerning touch." },
-  { label: "Vegetable-Tanned", desc: "Traditional bark-tanning. Ages into a personal patina." },
-  { label: "Crocodile-Emboss", desc: "Exotic texture, refined character. A statement in restraint." },
-];
+const MATERIALS_DEFAULT = {
+  hero_image: "",
+  hero_tag: "Substance",
+  hero_headline: "The Leather We Choose",
+  intro_body: "Sourced from the finest tanneries. Every hide is chosen for grain, weight, and how it ages over years of wear.",
+  items: [
+    { label: "Full-Grain Calfskin", desc: "The pinnacle of leather. Natural texture, unmatched durability." },
+    { label: "Premium Suede", desc: "Velvety nap, rich depth. For the discerning touch." },
+    { label: "Vegetable-Tanned", desc: "Traditional bark-tanning. Ages into a personal patina." },
+    { label: "Crocodile-Emboss", desc: "Exotic texture, refined character. A statement in restraint." },
+  ],
+};
 
 function MaterialsTab() {
-  const [materials, setMaterials] = useState(MATERIALS_DEFAULT);
+  const [form, setForm] = useState(MATERIALS_DEFAULT);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    loadSection("materials").then((d) => { if (d?.items) setMaterials(d.items); });
+    loadSection("materials").then((d) => { if (d) setForm({ ...MATERIALS_DEFAULT, ...d, items: d.items ?? MATERIALS_DEFAULT.items }); });
   }, []);
 
-  function update(i: number, key: "label" | "desc", val: string) {
-    setMaterials((arr) => arr.map((m, idx) => idx === i ? { ...m, [key]: val } : m));
+  function set(k: "hero_image" | "hero_tag" | "hero_headline" | "intro_body", v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
   }
-  function add() { setMaterials((arr) => [...arr, { label: "", desc: "" }]); }
-  function remove(i: number) { setMaterials((arr) => arr.filter((_, idx) => idx !== i)); }
+  function update(i: number, key: "label" | "desc", val: string) {
+    setForm((f) => ({ ...f, items: f.items.map((m, idx) => idx === i ? { ...m, [key]: val } : m) }));
+  }
+  function add() { setForm((f) => ({ ...f, items: [...f.items, { label: "", desc: "" }] })); }
+  function remove(i: number) { setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) })); }
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setMsg(null);
     try {
-      await saveSection("materials", { items: materials });
+      await saveSection("materials", form);
       setMsg({ text: "Materials saved.", ok: true });
     } catch {
       setMsg({ text: "Saved locally — API not connected.", ok: false });
@@ -335,10 +382,28 @@ function MaterialsTab() {
   return (
     <form onSubmit={save} className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
-      <p className="text-xs text-slate-400">These appear in the "The Leather We Choose" section on the homepage.</p>
+      <p className="text-xs text-slate-400">
+        The items below appear in the "The Leather We Choose" section on the homepage AND on the full /materials page.
+        The hero fields below are used only on the full /materials page.
+      </p>
+
+      <ImageUploadField label="Materials Page Hero Image" value={form.hero_image} onChange={(url) => set("hero_image", url)} />
+      <div>
+        <p className={lbl}>Hero Tag</p>
+        <input value={form.hero_tag} onChange={(e) => set("hero_tag", e.target.value)} placeholder="Substance" className={field} />
+      </div>
+      <div>
+        <p className={lbl}>Hero Headline</p>
+        <input value={form.hero_headline} onChange={(e) => set("hero_headline", e.target.value)} placeholder="The Leather We Choose" className={field} />
+      </div>
+      <div>
+        <p className={lbl}>Intro Body</p>
+        <textarea value={form.intro_body} onChange={(e) => set("intro_body", e.target.value)} rows={3} className={field + " resize-none"} />
+      </div>
 
       <div className="space-y-3">
-        {materials.map((m, i) => (
+        <p className={lbl}>Material Items</p>
+        {form.items.map((m, i) => (
           <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-600">Material {i + 1}</span>
@@ -474,10 +539,7 @@ function CtaTab() {
         </div>
       </div>
 
-      <div>
-        <p className={lbl}>Background Image URL</p>
-        <input value={form.image} onChange={(e) => set("image", e.target.value)} className={field} />
-      </div>
+      <ImageUploadField label="Background Image URL" value={form.image} onChange={(url) => set("image", url)} />
       <div>
         <p className={lbl}>Tag</p>
         <input value={form.tag} onChange={(e) => set("tag", e.target.value)} placeholder="Exclusive Access" className={field} />
@@ -506,6 +568,96 @@ function CtaTab() {
       </div>
       <button type="submit" disabled={saving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
         {saving ? "Saving…" : "Save CTA Banner"}
+      </button>
+    </form>
+  );
+}
+
+// ─── Factory & Quality Page ────────────────────────────────────────────────────
+
+const FACTORY_DEFAULT = {
+  hero_image: "",
+  hero_tag: "Our Craft",
+  hero_headline: "Made for men of distinction.",
+  intro_body: "Every Rizz piece begins as a single hide — selected, cut, and shaped by craftsmen who have spent decades understanding leather.",
+  steps: [
+    { title: "Selection", body: "Every hide is hand-inspected for grain, thickness, and finish before it ever touches a cutting table." },
+    { title: "Cutting & Stitching", body: "Patterns are cut by hand, stitched by craftsmen who have spent years perfecting their trade." },
+    { title: "Finishing", body: "Edges are burnished, hardware is fitted, and every piece is inspected before it leaves the workshop." },
+  ],
+};
+
+function FactoryQualityTab() {
+  const [form, setForm] = useState(FACTORY_DEFAULT);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    loadSection("factory-quality").then((d) => { if (d) setForm({ ...FACTORY_DEFAULT, ...d, steps: d.steps ?? FACTORY_DEFAULT.steps }); });
+  }, []);
+
+  function set(k: "hero_image" | "hero_tag" | "hero_headline" | "intro_body", v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+  function updateStep(i: number, key: "title" | "body", val: string) {
+    setForm((f) => ({ ...f, steps: f.steps.map((s, idx) => idx === i ? { ...s, [key]: val } : s) }));
+  }
+  function addStep() { setForm((f) => ({ ...f, steps: [...f.steps, { title: "", body: "" }] })); }
+  function removeStep(i: number) { setForm((f) => ({ ...f, steps: f.steps.filter((_, idx) => idx !== i) })); }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try {
+      await saveSection("factory-quality", form);
+      setMsg({ text: "Factory & Quality page saved.", ok: true });
+    } catch {
+      setMsg({ text: "Saved locally — API not connected.", ok: false });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <form onSubmit={save} className="space-y-5">
+      {msg && <Msg text={msg.text} ok={msg.ok} />}
+      <p className="text-xs text-slate-400">Controls the /factory-quality page, linked from the "Our Craft" button on the homepage editorial banner.</p>
+
+      <ImageUploadField label="Hero Image" value={form.hero_image} onChange={(url) => set("hero_image", url)} />
+      <div>
+        <p className={lbl}>Hero Tag</p>
+        <input value={form.hero_tag} onChange={(e) => set("hero_tag", e.target.value)} placeholder="Our Craft" className={field} />
+      </div>
+      <div>
+        <p className={lbl}>Hero Headline</p>
+        <input value={form.hero_headline} onChange={(e) => set("hero_headline", e.target.value)} className={field} />
+      </div>
+      <div>
+        <p className={lbl}>Intro Body</p>
+        <textarea value={form.intro_body} onChange={(e) => set("intro_body", e.target.value)} rows={3} className={field + " resize-none"} />
+      </div>
+
+      <div className="space-y-3">
+        <p className={lbl}>Process Steps</p>
+        {form.steps.map((s, i) => (
+          <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600">Step {i + 1}</span>
+              <button type="button" onClick={() => removeStep(i)} className="text-xs text-rose-600 hover:text-rose-800">Remove</button>
+            </div>
+            <div>
+              <p className={lbl}>Title</p>
+              <input value={s.title} onChange={(e) => updateStep(i, "title", e.target.value)} placeholder="Selection" className={field} />
+            </div>
+            <div>
+              <p className={lbl}>Description</p>
+              <input value={s.body} onChange={(e) => updateStep(i, "body", e.target.value)} placeholder="Short description..." className={field} />
+            </div>
+          </div>
+        ))}
+        <button type="button" onClick={addStep} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium hover:bg-slate-50">
+          + Add Step
+        </button>
+      </div>
+      <button type="submit" disabled={saving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+        {saving ? "Saving…" : "Save Factory & Quality Page"}
       </button>
     </form>
   );
@@ -552,6 +704,7 @@ export default function HomepagePage() {
           {activeTab === "materials" && <MaterialsTab />}
           {activeTab === "quote"     && <QuoteTab />}
           {activeTab === "cta"       && <CtaTab />}
+          {activeTab === "factory"   && <FactoryQualityTab />}
         </section>
       </div>
     </div>

@@ -34,6 +34,15 @@ async function api(path: string, method = "GET", body?: unknown) {
   return r.json();
 }
 
+async function uploadFile(path: string, file: File, fields: Record<string, string | undefined> = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  Object.entries(fields).forEach(([k, v]) => { if (v) form.append(k, v); });
+  const r = await fetch(`${API}${path}`, { method: "POST", body: form });
+  if (!r.ok) throw new Error(`POST ${path} → ${r.status}`);
+  return r.json();
+}
+
 function Msg({ text, ok = true }: { text: string; ok?: boolean }) {
   return (
     <div className={`rounded-xl border px-4 py-2.5 text-sm ${ok ? "border-teal-200 bg-teal-50 text-teal-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
@@ -376,7 +385,9 @@ function ImagesTab({ productId }: { productId: string }) {
   const [images, setImages] = useState<{ id: string; url: string; is_primary: boolean; alt?: string }[]>([]);
   const [url, setUrl] = useState("");
   const [alt, setAlt] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
@@ -404,6 +415,19 @@ function ImagesTab({ productId }: { productId: string }) {
     } catch {
       setMsg({ text: "Failed. Check API.", ok: false });
     } finally { setSaving(false); }
+  }
+
+  async function uploadImage() {
+    if (!file) { setMsg({ text: "Choose a file first.", ok: false }); return; }
+    setUploading(true); setMsg(null);
+    try {
+      const created = await uploadFile(`/products/${productId}/media/upload`, file, { alt_text: alt });
+      setImages((imgs) => [...imgs, { id: created.id, url: created.media_url, is_primary: created.is_primary ?? false, alt: created.alt_text }]);
+      setFile(null); setAlt("");
+      setMsg({ text: "Image uploaded.", ok: true });
+    } catch {
+      setMsg({ text: "Upload failed. Check API.", ok: false });
+    } finally { setUploading(false); }
   }
 
   async function setPrimary(id: string) {
@@ -443,6 +467,32 @@ function ImagesTab({ productId }: { productId: string }) {
         </div>
       )}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">Upload Image</p>
+        <div>
+          <p className={lbl}>Choose File</p>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className={field}
+          />
+        </div>
+        <div>
+          <p className={lbl}>Alt Text</p>
+          <input value={alt} onChange={(e) => setAlt(e.target.value)} placeholder="Men's tan loafer side view" className={field} />
+        </div>
+        <button onClick={uploadImage} disabled={uploading || !file} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+          {uploading ? "Uploading…" : "↑ Upload Image"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" />
+        or
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
         <p className="text-sm font-semibold text-slate-700">Add Image by URL</p>
         <div>
           <p className={lbl}>Image URL</p>
@@ -466,7 +516,9 @@ function VideosTab({ productId }: { productId: string }) {
   const [videos, setVideos] = useState<{ id: string; url: string; title?: string }[]>([]);
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
@@ -496,6 +548,19 @@ function VideosTab({ productId }: { productId: string }) {
     } finally { setSaving(false); }
   }
 
+  async function uploadVideo() {
+    if (!file) { setMsg({ text: "Choose a file first.", ok: false }); return; }
+    setUploading(true); setMsg(null);
+    try {
+      const created = await uploadFile(`/products/${productId}/media/upload`, file, { title });
+      setVideos((v) => [...v, { id: created.id, url: created.media_url, title: created.title }]);
+      setFile(null); setTitle("");
+      setMsg({ text: "Video uploaded.", ok: true });
+    } catch {
+      setMsg({ text: "Upload failed. Check API.", ok: false });
+    } finally { setUploading(false); }
+  }
+
   async function deleteVideo(id: string) {
     if (!confirm("Delete this video?")) return;
     try {
@@ -521,14 +586,31 @@ function VideosTab({ productId }: { productId: string }) {
         </div>
       )}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-        <p className="text-sm font-semibold text-slate-700">Add Video</p>
+        <p className="text-sm font-semibold text-slate-700">Upload Video File</p>
         <div>
-          <p className={lbl}>Video URL (YouTube / Vimeo / direct)</p>
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className={field} />
+          <p className={lbl}>Choose File</p>
+          <input type="file" accept="video/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className={field} />
         </div>
         <div>
           <p className={lbl}>Title</p>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Product showcase video" className={field} />
+        </div>
+        <button onClick={uploadVideo} disabled={uploading || !file} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+          {uploading ? "Uploading…" : "↑ Upload Video"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" />
+        or
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <p className="text-sm font-semibold text-slate-700">Add Video by Link</p>
+        <div>
+          <p className={lbl}>Video URL (YouTube / Vimeo / direct)</p>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className={field} />
         </div>
         <button onClick={addVideo} disabled={saving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
           {saving ? "Adding…" : "+ Add Video"}
