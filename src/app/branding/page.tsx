@@ -5,45 +5,33 @@ import { useState, useEffect } from "react";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
 type BrandingData = {
-  announcementBar: {
-    text: string;
-    isActive: boolean;
-  };
-  freeShippingThreshold: number;
-  contact: {
-    whatsapp: string;
-    whatsappDisplay: string;
-    email: string;
-    location: string;
-    shipping: string;
-  };
-  social: {
-    instagram: string;
-    facebook: string;
-    tiktok: string;
-    youtube: string;
-  };
+  announcement_bar_text: string;
+  announcement_bar_active: boolean;
+  free_shipping_threshold: number;
+  contact_whatsapp: string;
+  contact_whatsapp_display: string;
+  contact_email: string;
+  contact_location: string;
+  contact_shipping: string;
+  social_instagram: string;
+  social_facebook: string;
+  social_tiktok: string;
+  social_youtube: string;
 };
 
 const DEFAULT: BrandingData = {
-  announcementBar: {
-    text: "Complimentary shipping on orders above ৳5,000  ·  COD available nationwide",
-    isActive: true,
-  },
-  freeShippingThreshold: 5000,
-  contact: {
-    whatsapp: "8801750514197",
-    whatsappDisplay: "+880 175 051 4197",
-    email: "rizzleatherbd@gmail.com",
-    location: "Chittagong, Bangladesh",
-    shipping: "Bangladesh · USA · Europe · Middle East",
-  },
-  social: {
-    instagram: "",
-    facebook: "",
-    tiktok: "",
-    youtube: "",
-  },
+  announcement_bar_text: "Complimentary shipping on orders above ৳5,000  ·  COD available nationwide",
+  announcement_bar_active: true,
+  free_shipping_threshold: 5000,
+  contact_whatsapp: "8801750514197",
+  contact_whatsapp_display: "+880 175 051 4197",
+  contact_email: "rizzleatherbd@gmail.com",
+  contact_location: "Chittagong, Bangladesh",
+  contact_shipping: "Bangladesh · USA · Europe · Middle East",
+  social_instagram: "",
+  social_facebook: "",
+  social_tiktok: "",
+  social_youtube: "",
 };
 
 export default function BrandingPage() {
@@ -55,15 +43,14 @@ export default function BrandingPage() {
   useEffect(() => {
     fetch(`${API}/branding`, { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setData(d); })
+      // Merge over defaults — the API may return {} (nothing saved yet) or a
+      // partial object, never blindly replace the whole default shape.
+      .then((d) => { if (d && typeof d === "object") setData((prev) => ({ ...prev, ...d })); })
       .catch(() => {});
   }, []);
 
-  function setContact<K extends keyof BrandingData["contact"]>(key: K, val: string) {
-    setData((d) => ({ ...d, contact: { ...d.contact, [key]: val } }));
-  }
-  function setSocial<K extends keyof BrandingData["social"]>(key: K, val: string) {
-    setData((d) => ({ ...d, social: { ...d.social, [key]: val } }));
+  function set<K extends keyof BrandingData>(key: K, val: BrandingData[K]) {
+    setData((d) => ({ ...d, [key]: val }));
   }
 
   async function save() {
@@ -119,14 +106,14 @@ export default function BrandingPage() {
             <h2 className="font-semibold text-slate-900">Announcement Bar</h2>
 
             <div className="rounded-xl bg-slate-950 px-4 py-2.5 text-center text-xs text-amber-300 font-medium tracking-wide">
-              {data.announcementBar.text || "Preview of announcement bar"}
+              {data.announcement_bar_text || "Preview of announcement bar"}
             </div>
 
             <div>
               <p className={lbl}>Bar Text</p>
               <input
-                value={data.announcementBar.text}
-                onChange={(e) => setData((d) => ({ ...d, announcementBar: { ...d.announcementBar, text: e.target.value } }))}
+                value={data.announcement_bar_text}
+                onChange={(e) => set("announcement_bar_text", e.target.value)}
                 className={field}
                 placeholder="Complimentary shipping on orders above ৳5,000  ·  COD available nationwide"
               />
@@ -135,8 +122,8 @@ export default function BrandingPage() {
             <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <input
                 type="checkbox"
-                checked={data.announcementBar.isActive}
-                onChange={(e) => setData((d) => ({ ...d, announcementBar: { ...d.announcementBar, isActive: e.target.checked } }))}
+                checked={data.announcement_bar_active}
+                onChange={(e) => set("announcement_bar_active", e.target.checked)}
                 className="h-4 w-4"
               />
               <span className="text-sm font-medium text-slate-800">Show announcement bar on storefront</span>
@@ -148,11 +135,11 @@ export default function BrandingPage() {
                 <p className={lbl}>Free Shipping Threshold (BDT)</p>
                 <input
                   type="number"
-                  value={data.freeShippingThreshold}
-                  onChange={(e) => setData((d) => ({ ...d, freeShippingThreshold: Number(e.target.value) }))}
+                  value={data.free_shipping_threshold}
+                  onChange={(e) => set("free_shipping_threshold", Number(e.target.value))}
                   className={field}
                 />
-                <p className="mt-1 text-xs text-slate-400">Orders above this amount get free shipping. Currently ৳{data.freeShippingThreshold.toLocaleString()}.</p>
+                <p className="mt-1 text-xs text-slate-400">Orders above this amount get free shipping. Currently ৳{data.free_shipping_threshold.toLocaleString()}.</p>
               </div>
             </div>
           </section>
@@ -162,24 +149,24 @@ export default function BrandingPage() {
         {activeTab === "contact" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
             <h2 className="font-semibold text-slate-900">Contact Information</h2>
-            <p className="text-xs text-slate-400">These values are used in the footer, contact page, and WhatsApp links throughout the site.</p>
+            <p className="text-xs text-slate-400">These values are saved here, but the storefront footer/contact page currently use hardcoded text — ask if you want those wired up to read from here.</p>
 
             {[
-              { key: "whatsapp" as const, label: "WhatsApp Number (no spaces)", placeholder: "8801750514197" },
-              { key: "whatsappDisplay" as const, label: "WhatsApp Display Format", placeholder: "+880 175 051 4197" },
-              { key: "email" as const, label: "Email Address", placeholder: "rizzleatherbd@gmail.com" },
-              { key: "location" as const, label: "Location", placeholder: "Chittagong, Bangladesh" },
-              { key: "shipping" as const, label: "Shipping Destinations", placeholder: "Bangladesh · USA · Europe · Middle East" },
+              { key: "contact_whatsapp" as const, label: "WhatsApp Number (no spaces)", placeholder: "8801750514197" },
+              { key: "contact_whatsapp_display" as const, label: "WhatsApp Display Format", placeholder: "+880 175 051 4197" },
+              { key: "contact_email" as const, label: "Email Address", placeholder: "rizzleatherbd@gmail.com" },
+              { key: "contact_location" as const, label: "Location", placeholder: "Chittagong, Bangladesh" },
+              { key: "contact_shipping" as const, label: "Shipping Destinations", placeholder: "Bangladesh · USA · Europe · Middle East" },
             ].map(({ key, label, placeholder }) => (
               <div key={key}>
                 <p className={lbl}>{label}</p>
-                <input value={data.contact[key]} onChange={(e) => setContact(key, e.target.value)} placeholder={placeholder} className={field} />
+                <input value={data[key]} onChange={(e) => set(key, e.target.value)} placeholder={placeholder} className={field} />
               </div>
             ))}
 
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
               <span className="font-semibold">WhatsApp link: </span>
-              <code className="text-xs">wa.me/{data.contact.whatsapp}</code>
+              <code className="text-xs">wa.me/{data.contact_whatsapp}</code>
             </div>
           </section>
         )}
@@ -188,17 +175,17 @@ export default function BrandingPage() {
         {activeTab === "social" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
             <h2 className="font-semibold text-slate-900">Social Links</h2>
-            <p className="text-xs text-slate-400">Full URLs shown in the footer. Leave blank to hide.</p>
+            <p className="text-xs text-slate-400">Saved here; footer currently does not read these yet — ask if you want them wired up.</p>
 
             {[
-              { key: "instagram" as const, label: "Instagram URL", placeholder: "https://instagram.com/rizzleatherbd" },
-              { key: "facebook" as const, label: "Facebook URL", placeholder: "https://facebook.com/rizzleatherbd" },
-              { key: "tiktok" as const, label: "TikTok URL", placeholder: "https://tiktok.com/@rizzleatherbd" },
-              { key: "youtube" as const, label: "YouTube URL", placeholder: "https://youtube.com/@rizzleatherbd" },
+              { key: "social_instagram" as const, label: "Instagram URL", placeholder: "https://instagram.com/rizzleatherbd" },
+              { key: "social_facebook" as const, label: "Facebook URL", placeholder: "https://facebook.com/rizzleatherbd" },
+              { key: "social_tiktok" as const, label: "TikTok URL", placeholder: "https://tiktok.com/@rizzleatherbd" },
+              { key: "social_youtube" as const, label: "YouTube URL", placeholder: "https://youtube.com/@rizzleatherbd" },
             ].map(({ key, label, placeholder }) => (
               <div key={key}>
                 <p className={lbl}>{label}</p>
-                <input value={data.social[key]} onChange={(e) => setSocial(key, e.target.value)} placeholder={placeholder} className={field} />
+                <input value={data[key]} onChange={(e) => set(key, e.target.value)} placeholder={placeholder} className={field} />
               </div>
             ))}
           </section>

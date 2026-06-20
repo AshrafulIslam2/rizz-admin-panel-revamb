@@ -13,6 +13,7 @@ const TABS = [
   { id: "variants", label: "Variants" },
   { id: "price",    label: "Price & Discount" },
   { id: "tags",     label: "Tags" },
+  { id: "seo",      label: "SEO" },
   { id: "images",   label: "Images" },
   { id: "videos",   label: "Videos" },
   { id: "faq",      label: "FAQ" },
@@ -176,18 +177,26 @@ function CategoryTab({ productId, initial }: { productId: string; initial: Recor
 
 // ─── Variants ────────────────────────────────────────────────────────────────
 
-type Variant = { id?: string; size: string; color: string; price: string; stock: string };
+type Variant = { id?: string; size: string; color: string; price: string; salePrice?: string; stock: string };
 
 function VariantsTab({ productId }: { productId: string }) {
-  const [variants, setVariants] = useState<Variant[]>([]);
-  const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", stock: "0" });
+  const [variants, setVariants] = useState<any[]>([]);
+  const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", salePrice: "", stock: "0" });
+  const [edits, setEdits] = useState<Record<string, { price: string; sale_price: string }>>({});
+  const [savingRow, setSavingRow] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     fetch(`${API}/products/${productId}/variants`, { cache: "no-store" })
       .then((r) => r.ok ? r.json() : [])
-      .then((d) => setVariants(Array.isArray(d) ? d : d?.variants ?? []))
+      .then((d) => {
+        const list = Array.isArray(d) ? d : d?.variants ?? [];
+        setVariants(list);
+        const init: Record<string, { price: string; sale_price: string }> = {};
+        list.forEach((v: any) => { if (v.id) init[v.id] = { price: String(v.price ?? ""), sale_price: String(v.sale_price ?? "") }; });
+        setEdits(init);
+      })
       .catch(() => {});
   }, [productId]);
 
@@ -200,18 +209,35 @@ function VariantsTab({ productId }: { productId: string }) {
         sku: `RIZZ-${productId.slice(-6)}-${draft.size}-${draft.color.replace(/\s+/g, "")}-${Date.now()}`,
         variant_name: variantName,
         price: Number(draft.price),
-        sale_price: null,
+        sale_price: draft.salePrice ? Number(draft.salePrice) : null,
         stock_qty: Number(draft.stock),
         attributes: { size: draft.size, color: draft.color },
         is_default: false,
         status: "ACTIVE",
       });
       setVariants((v) => [...v, created]);
+      setEdits((e) => ({ ...e, [created.id]: { price: String(created.price ?? ""), sale_price: String(created.sale_price ?? "") } }));
       setMsg({ text: "Variant added.", ok: true });
-      setDraft({ size: "41", color: "Tan", price: "", stock: "0" });
+      setDraft({ size: "41", color: "Tan", price: "", salePrice: "", stock: "0" });
     } catch {
       setMsg({ text: "Failed. Check API.", ok: false });
     } finally { setSaving(false); }
+  }
+
+  async function savePricing(id: string) {
+    const e = edits[id];
+    if (!e) return;
+    setSavingRow(id); setMsg(null);
+    try {
+      const updated = await api(`/products/${productId}/variants/${id}`, "PATCH", {
+        price: Number(e.price),
+        sale_price: e.sale_price ? Number(e.sale_price) : null,
+      });
+      setVariants((vs) => vs.map((v) => v.id === id ? updated : v));
+      setMsg({ text: "Variant pricing updated.", ok: true });
+    } catch {
+      setMsg({ text: "Failed to update pricing. Check API.", ok: false });
+    } finally { setSavingRow(null); }
   }
 
   async function deleteVariant(id: string) {
@@ -225,26 +251,56 @@ function VariantsTab({ productId }: { productId: string }) {
   return (
     <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      <p className="text-xs text-slate-400">
+        The storefront always shows the <strong>lowest price across these variants</strong> on product cards. Set a
+        Sale Price on any variant to discount it — the card and product page automatically reflect whichever variant is cheapest.
+      </p>
       {variants.length > 0 && (
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{["Size", "Color", "Price (৳)", "Stock", ""].map((h) => (
+              <tr>{["Size", "Color", "Price (৳)", "Sale Price (৳)", "Stock", ""].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
               ))}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {variants.map((v, i) => (
-                <tr key={v.id ?? i}>
-                  <td className="px-4 py-2.5 font-medium">{(v as any).attributes?.size ?? v.size}</td>
-                  <td className="px-4 py-2.5">{(v as any).attributes?.color ?? v.color}</td>
-                  <td className="px-4 py-2.5">৳{Number(v.price).toLocaleString()}</td>
-                  <td className="px-4 py-2.5">{(v as any).stock_qty ?? v.stock ?? 0}</td>
-                  <td className="px-4 py-2.5">
-                    {v.id && <button onClick={() => deleteVariant(v.id!)} className="text-xs text-rose-600 hover:text-rose-800">Delete</button>}
-                  </td>
-                </tr>
-              ))}
+              {variants.map((v, i) => {
+                const id = v.id ?? String(i);
+                const rowEdit = edits[id] ?? { price: String(v.price ?? ""), sale_price: String(v.sale_price ?? "") };
+                const dirty = v.id && (rowEdit.price !== String(v.price ?? "") || rowEdit.sale_price !== String(v.sale_price ?? ""));
+                return (
+                  <tr key={id}>
+                    <td className="px-4 py-2.5 font-medium">{v.attributes?.size ?? v.size}</td>
+                    <td className="px-4 py-2.5">{v.attributes?.color ?? v.color}</td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="number"
+                        value={rowEdit.price}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, price: e.target.value } }))}
+                        className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="number"
+                        placeholder="—"
+                        value={rowEdit.sale_price}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, sale_price: e.target.value } }))}
+                        className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">{v.stock_qty ?? v.stock ?? 0}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      {dirty && (
+                        <button onClick={() => savePricing(id)} disabled={savingRow === id} className="mr-3 text-xs font-semibold text-teal-700 hover:text-teal-900 disabled:opacity-50">
+                          {savingRow === id ? "Saving…" : "Save"}
+                        </button>
+                      )}
+                      {v.id && <button onClick={() => deleteVariant(v.id!)} className="text-xs text-rose-600 hover:text-rose-800">Delete</button>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -267,6 +323,10 @@ function VariantsTab({ productId }: { productId: string }) {
           <div>
             <p className={lbl}>Price (BDT)</p>
             <input type="number" value={draft.price} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))} placeholder="4500" className={field} />
+          </div>
+          <div>
+            <p className={lbl}>Sale Price (BDT, optional)</p>
+            <input type="number" value={draft.salePrice} onChange={(e) => setDraft((d) => ({ ...d, salePrice: e.target.value }))} placeholder="3999" className={field} />
           </div>
           <div>
             <p className={lbl}>Stock Qty</p>
@@ -314,9 +374,14 @@ function PriceTab({ productId, initial }: { productId: string; initial: Record<s
   return (
     <form onSubmit={save} className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        This is a <strong>fallback price</strong>, only shown when this product has no variants. If you&apos;ve added
+        Size/Color variants in the <strong>Variants</strong> tab, the storefront always shows the lowest variant price
+        (and any per-variant sale price) instead — set discounts there for variant-based products.
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <p className={lbl}>Base Price (BDT) *</p>
+          <p className={lbl}>Base Price (BDT)</p>
           <input type="number" value={form.price} onChange={(e) => set("price", e.target.value)} placeholder="4500" className={field} />
         </div>
         <div>
@@ -375,6 +440,67 @@ function TagsTab({ productId, initial }: { productId: string; initial: Record<st
         </div>
       )}
       <SaveBtn saving={saving} label="Save Tags" />
+    </form>
+  );
+}
+
+// ─── SEO ─────────────────────────────────────────────────────────────────────
+
+function SeoTab({ productId, initial }: { productId: string; initial: Record<string, unknown> }) {
+  const [metaTitle, setMetaTitle] = useState((initial.meta_title as string) ?? "");
+  const [metaDescription, setMetaDescription] = useState((initial.meta_description as string) ?? "");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const fallbackTitle = `${initial.name ?? "Product"} — ${initial.material ?? "Genuine Leather"} | RIZZ`;
+  const fallbackDescription = String(initial.short_description ?? initial.description ?? "").slice(0, 160);
+  const previewTitle = metaTitle || fallbackTitle;
+  const previewDescription = metaDescription || fallbackDescription;
+  const previewUrl = `rizzleather.com/brand/catalog/${initial.slug ?? ""}`;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try {
+      await api(`/products/${productId}`, "PATCH", {
+        meta_title: metaTitle || undefined,
+        meta_description: metaDescription || undefined,
+      });
+      setMsg({ text: "SEO saved.", ok: true });
+    } catch {
+      setMsg({ text: "Failed. Check API.", ok: false });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <form onSubmit={save} className="space-y-5">
+      {msg && <Msg text={msg.text} ok={msg.ok} />}
+      <p className="text-xs text-slate-400">
+        Leave blank to auto-generate from the product&apos;s name, material, and description — only set these if you want
+        full control over how this product appears in Google search results and AI answer engines.
+      </p>
+
+      {/* Google-style preview */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="text-xs text-slate-500">{previewUrl}</p>
+        <p className="mt-0.5 text-base text-blue-700 truncate">{previewTitle}</p>
+        <p className="mt-0.5 text-sm text-slate-600 line-clamp-2">{previewDescription || "No description set."}</p>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <p className={lbl}>Meta Title</p>
+          <span className={`text-xs ${metaTitle.length > 60 ? "text-rose-500" : "text-slate-400"}`}>{metaTitle.length}/60</span>
+        </div>
+        <input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} placeholder={fallbackTitle} className={field} />
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <p className={lbl}>Meta Description</p>
+          <span className={`text-xs ${metaDescription.length > 160 ? "text-rose-500" : "text-slate-400"}`}>{metaDescription.length}/160</span>
+        </div>
+        <textarea value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} rows={3} placeholder={fallbackDescription} className={field + " resize-none"} />
+      </div>
+      <SaveBtn saving={saving} label="Save SEO" />
     </form>
   );
 }
@@ -712,9 +838,34 @@ function FaqTab({ productId }: { productId: string }) {
 
 // ─── Reviews ─────────────────────────────────────────────────────────────────
 
+type Review = {
+  id: string;
+  customer_name: string;
+  customer_image_url?: string | null;
+  comment?: string | null;
+  rating?: number | null;
+  status: string;
+};
+
+function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" onClick={() => onChange(n)} className="text-xl leading-none">
+          <span className={n <= value ? "text-amber-400" : "text-slate-300"}>★</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ReviewsTab({ productId }: { productId: string }) {
-  const [reviews, setReviews] = useState<{ id: string; author: string; rating: number; body: string; status: string }[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const [draft, setDraft] = useState({ customer_name: "", comment: "", rating: 5, customer_image_url: "" });
 
   useEffect(() => {
     fetch(`${API}/reviews?productId=${productId}`, { cache: "no-store" })
@@ -723,12 +874,46 @@ function ReviewsTab({ productId }: { productId: string }) {
       .catch(() => {});
   }, [productId]);
 
-  async function approve(id: string) {
+  async function handleImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
     try {
-      await api(`/reviews/${id}`, "PATCH", { status: "approved" });
-      setReviews((r) => r.map((x) => (x.id === id ? { ...x, status: "approved" } : x)));
-      setMsg({ text: "Review approved.", ok: true });
-    } catch { setMsg({ text: "Failed.", ok: false }); }
+      const result = await uploadFile("/uploads", file);
+      setDraft((d) => ({ ...d, customer_image_url: result.url }));
+    } catch {
+      setMsg({ text: "Image upload failed.", ok: false });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function addReview() {
+    if (!draft.customer_name.trim()) { setMsg({ text: "Customer name is required.", ok: false }); return; }
+    setSaving(true); setMsg(null);
+    try {
+      const created = await api(`/products/${productId}/reviews`, "POST", {
+        customer_name: draft.customer_name,
+        comment: draft.comment || undefined,
+        rating: draft.rating,
+        customer_image_url: draft.customer_image_url || undefined,
+        status: "active",
+      });
+      setReviews((r) => [created, ...r]);
+      setDraft({ customer_name: "", comment: "", rating: 5, customer_image_url: "" });
+      setMsg({ text: "Review added.", ok: true });
+    } catch {
+      setMsg({ text: "Failed. Check API.", ok: false });
+    } finally { setSaving(false); }
+  }
+
+  async function toggleStatus(r: Review) {
+    const next = r.status === "active" ? "inactive" : "active";
+    try {
+      await api(`/reviews/${r.id}`, "PATCH", { status: next });
+      setReviews((rs) => rs.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
+    } catch { setMsg({ text: "Failed to update status.", ok: false }); }
   }
 
   async function deleteReview(id: string) {
@@ -739,35 +924,74 @@ function ReviewsTab({ productId }: { productId: string }) {
     } catch { setMsg({ text: "Delete failed.", ok: false }); }
   }
 
-  if (reviews.length === 0) return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-400">
-      No reviews for this product yet.
-    </div>
-  );
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
-      {reviews.map((r) => (
-        <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-sm text-slate-900">{r.author}</span>
-                <span className="text-amber-400 text-xs">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.status === "approved" ? "bg-teal-100 text-teal-800" : "bg-amber-100 text-amber-800"}`}>{r.status}</span>
-              </div>
-              <p className="text-sm text-slate-600">{r.body}</p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              {r.status !== "approved" && (
-                <button onClick={() => approve(r.id)} className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-100">Approve</button>
-              )}
-              <button onClick={() => deleteReview(r.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100">Delete</button>
-            </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+        <p className="text-sm font-semibold text-slate-700">Add Customer Review</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className={lbl}>Customer Name</p>
+            <input value={draft.customer_name} onChange={(e) => setDraft((d) => ({ ...d, customer_name: e.target.value }))} placeholder="Rafiqul H." className={field} />
+          </div>
+          <div>
+            <p className={lbl}>Rating</p>
+            <StarPicker value={draft.rating} onChange={(v) => setDraft((d) => ({ ...d, rating: v }))} />
           </div>
         </div>
-      ))}
+        <div>
+          <p className={lbl}>Review Text</p>
+          <textarea value={draft.comment} onChange={(e) => setDraft((d) => ({ ...d, comment: e.target.value }))} rows={3} placeholder="Exceptional quality..." className={field + " resize-none"} />
+        </div>
+        <div>
+          <p className={lbl}>Customer Photo (optional)</p>
+          <div className="flex items-center gap-3">
+            {draft.customer_image_url && (
+              <img src={draft.customer_image_url} alt="" className="h-10 w-10 rounded-full object-cover border border-slate-200" />
+            )}
+            <label className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer transition">
+              {uploading ? "Uploading…" : draft.customer_image_url ? "Change Photo" : "Upload Photo"}
+              <input type="file" accept="image/*" onChange={handleImage} disabled={uploading} className="hidden" />
+            </label>
+          </div>
+        </div>
+        <button onClick={addReview} disabled={saving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
+          {saving ? "Adding…" : "+ Add Review"}
+        </button>
+      </div>
+
+      {reviews.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-400">
+          No reviews for this product yet.
+        </div>
+      ) : (
+        reviews.map((r) => (
+          <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-1 min-w-0 gap-3">
+                {r.customer_image_url && (
+                  <img src={r.customer_image_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover border border-slate-200" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm text-slate-900">{r.customer_name}</span>
+                    <span className="text-amber-400 text-xs">{"★".repeat(r.rating ?? 0)}{"☆".repeat(5 - (r.rating ?? 0))}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.status === "active" ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-500"}`}>{r.status}</span>
+                  </div>
+                  <p className="text-sm text-slate-600">{r.comment}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => toggleStatus(r)} className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${r.status === "active" ? "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100" : "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"}`}>
+                  {r.status === "active" ? "Deactivate" : "Activate"}
+                </button>
+                <button onClick={() => deleteReview(r.id)} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100">Delete</button>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -872,6 +1096,7 @@ export default function ProductTabs({
         {activeTab === "variants" && <VariantsTab productId={productId} />}
         {activeTab === "price"    && <PriceTab    productId={productId} initial={initialData} />}
         {activeTab === "tags"     && <TagsTab     productId={productId} initial={initialData} />}
+        {activeTab === "seo"      && <SeoTab      productId={productId} initial={initialData} />}
         {activeTab === "images"   && <ImagesTab   productId={productId} />}
         {activeTab === "videos"   && <VideosTab   productId={productId} />}
         {activeTab === "faq"      && <FaqTab      productId={productId} />}

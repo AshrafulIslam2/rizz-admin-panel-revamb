@@ -48,7 +48,7 @@ export default function SeoPage() {
     fetch(`${API}/seo/${activeKey}`, { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (data) setSeoMap((m) => ({ ...m, [activeKey]: data }));
+        if (data) setSeoMap((m) => ({ ...m, [activeKey]: { ...EMPTY, ...data } }));
       })
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -6,6 +6,20 @@ type Product = {
   description?: string
   sku?: string
   price?: number
+  media?: { media_url: string; is_primary: boolean }[]
+  variants?: { price: number; sale_price?: number | null }[]
+}
+
+function cardPrice(p: Product): number {
+  if (p.variants && p.variants.length > 0) {
+    return Math.min(...p.variants.map((v) => v.sale_price ?? v.price))
+  }
+  return p.price ?? 0
+}
+
+function cardImage(p: Product): string | null {
+  if (!p.media || p.media.length === 0) return null
+  return (p.media.find((m) => m.is_primary) ?? p.media[0]).media_url
 }
 
 export default async function ProductsPage() {
@@ -53,25 +67,36 @@ export default async function ProductsPage() {
         </div>
 
         <div className="grid gap-4 mt-6 md:grid-cols-2">
-          {products.map((p: Product) => (
-            <div key={p.id} className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    <Link href={`/products/${p.id}`} className="hover:underline">
-                      {p.name}
-                    </Link>
-                  </h2>
-                  <p className="text-sm text-slate-600 mt-2 line-clamp-2">{p.description}</p>
+          {products.map((p: Product) => {
+            const img = cardImage(p)
+            const price = cardPrice(p)
+            return (
+              <div key={p.id} className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
+                <div className="flex items-start gap-4">
+                  {img ? (
+                    <img src={img} alt={p.name} className="h-16 w-16 shrink-0 rounded-lg object-cover bg-slate-100" />
+                  ) : (
+                    <div className="h-16 w-16 shrink-0 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 text-xs">No image</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        <Link href={`/products/${p.id}`} className="hover:underline">
+                          {p.name}
+                        </Link>
+                      </h2>
+                      <span className="rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 shrink-0">Live</span>
+                    </div>
+                    <p className="text-sm text-slate-600 mt-1 line-clamp-2">{p.description}</p>
+                  </div>
                 </div>
-                <span className="rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1">Live</span>
+                <div className="mt-4 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">SKU: {p.sku || 'N/A'}</span>
+                  <span className="text-lg font-semibold text-slate-900">{price > 0 ? `৳${price.toLocaleString()}` : '—'}</span>
+                </div>
               </div>
-              <div className="mt-4 flex items-center justify-between">
-                <span className="text-sm text-slate-500">SKU: {p.sku || 'N/A'}</span>
-                <span className="text-lg font-semibold text-slate-900">${p.price}</span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </main>
