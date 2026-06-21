@@ -1,8 +1,103 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+
+// ─── AI Generated Data Type ───────────────────────────────────────────────────
+type AiData = {
+  name?: string;
+  short_description?: string;
+  description?: string;
+  slug?: string;
+  seo?: {
+    meta_title?: string;
+    meta_description?: string;
+    focus_keyword?: string;
+    secondary_keywords?: string[];
+  };
+  tags?: string[];
+  alt_text?: string;
+  faq?: { question: string; answer: string }[];
+};
+
+// ─── AI Generate Bar ──────────────────────────────────────────────────────────
+function AiGenerateBar({
+  productId,
+  productName,
+  onGenerated,
+}: {
+  productId: string;
+  productName?: string;
+  onGenerated: (data: AiData) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function generate() {
+    setLoading(true); setError(null); setDone(false);
+    try {
+      // 1. Fetch product media to get primary image
+      const mediaRes = await fetch(`${API}/products/${productId}/media`, { cache: "no-store" });
+      const mediaData = mediaRes.ok ? await mediaRes.json() : [];
+      const mediaList: any[] = Array.isArray(mediaData)
+        ? mediaData
+        : mediaData?.media ?? mediaData?.images ?? [];
+
+      const primary =
+        mediaList.find((m: any) => m.is_primary) ?? mediaList[0];
+      const imageUrl = primary?.media_url ?? primary?.url ?? primary?.image_url;
+
+      if (!imageUrl) {
+        setError("No product image found. Please upload an image first (Images tab).");
+        return;
+      }
+
+      // 2. Call our AI API
+      const res = await fetch("/api/generate-product-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl, productName }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Generation failed");
+
+      onGenerated(json.data as AiData);
+      setDone(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mb-5 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-violet-900">✨ AI Content Generator</p>
+          <p className="text-xs text-violet-600 mt-0.5">
+            Product image থেকে title, description, SEO, tags ও FAQ — সব auto generate হবে।
+            {done && <span className="ml-2 font-semibold text-green-700">✅ Applied! নিচের tabs এ দেখো।</span>}
+          </p>
+        </div>
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="shrink-0 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60 transition whitespace-nowrap"
+        >
+          {loading ? "⏳ Generating… (15-25s)" : "✨ Generate AI Content"}
+        </button>
+      </div>
+      {error && (
+        <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          ❌ {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 const field = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-teal-400 w-full";
 const lbl = "block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5";
@@ -62,7 +157,15 @@ function SaveBtn({ saving, label = "Save Changes" }: { saving: boolean; label?: 
 
 // ─── Basic Info ──────────────────────────────────────────────────────────────
 
-function BasicTab({ productId, initial }: { productId: string; initial: Record<string, unknown> }) {
+function BasicTab({
+  productId,
+  initial,
+  aiData,
+}: {
+  productId: string;
+  initial: Record<string, unknown>;
+  aiData?: AiData;
+}) {
   const [form, setForm] = useState({
     name: (initial.name as string) ?? "",
     slug: (initial.slug as string) ?? "",
@@ -74,6 +177,20 @@ function BasicTab({ productId, initial }: { productId: string; initial: Record<s
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+
+  // Apply AI data when it arrives
+  useEffect(() => {
+    if (!aiData) return;
+    setForm((f) => ({
+      ...f,
+      name: aiData.name ?? f.name,
+      slug: aiData.slug ?? f.slug,
+      short_description: aiData.short_description ?? f.short_description,
+      description: aiData.description ?? f.description,
+    }));
+    setAiApplied(true);
+  }, [aiData]);
 
   function set(k: keyof typeof form, v: string) { setForm((f) => ({ ...f, [k]: v })); }
 
@@ -91,6 +208,11 @@ function BasicTab({ productId, initial }: { productId: string; initial: Record<s
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      {aiApplied && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs text-violet-800">
+          ✨ AI content applied! Review the fields below and click <strong>Save Changes</strong>.
+        </div>
+      )}
       <div>
         <p className={lbl}>Product Name</p>
         <input value={form.name} onChange={(e) => set("name", e.target.value)} className={field} />
@@ -406,11 +528,23 @@ function PriceTab({ productId, initial }: { productId: string; initial: Record<s
 
 // ─── Tags ────────────────────────────────────────────────────────────────────
 
-function TagsTab({ productId, initial }: { productId: string; initial: Record<string, unknown> }) {
+function TagsTab({
+  productId,
+  initial,
+  aiData,
+}: {
+  productId: string;
+  initial: Record<string, unknown>;
+  aiData?: AiData;
+}) {
   const initTags = Array.isArray(initial.tags) ? (initial.tags as string[]).join(", ") : String(initial.tags ?? "");
   const [tags, setTags] = useState(initTags);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    if (aiData?.tags?.length) setTags(aiData.tags.join(", "));
+  }, [aiData]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setMsg(null);
@@ -446,11 +580,27 @@ function TagsTab({ productId, initial }: { productId: string; initial: Record<st
 
 // ─── SEO ─────────────────────────────────────────────────────────────────────
 
-function SeoTab({ productId, initial }: { productId: string; initial: Record<string, unknown> }) {
+function SeoTab({
+  productId,
+  initial,
+  aiData,
+}: {
+  productId: string;
+  initial: Record<string, unknown>;
+  aiData?: AiData;
+}) {
   const [metaTitle, setMetaTitle] = useState((initial.meta_title as string) ?? "");
   const [metaDescription, setMetaDescription] = useState((initial.meta_description as string) ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+
+  useEffect(() => {
+    if (!aiData?.seo) return;
+    if (aiData.seo.meta_title) setMetaTitle(aiData.seo.meta_title);
+    if (aiData.seo.meta_description) setMetaDescription(aiData.seo.meta_description);
+    setAiApplied(true);
+  }, [aiData]);
 
   const fallbackTitle = `${initial.name ?? "Product"} — ${initial.material ?? "Genuine Leather"} | RIZZ`;
   const fallbackDescription = String(initial.short_description ?? initial.description ?? "").slice(0, 160);
@@ -474,6 +624,14 @@ function SeoTab({ productId, initial }: { productId: string; initial: Record<str
   return (
     <form onSubmit={save} className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      {aiApplied && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs text-violet-800">
+          ✨ AI SEO content applied! Review and click <strong>Save SEO</strong>.
+          {aiData?.seo?.focus_keyword && (
+            <span className="ml-2 text-violet-600">Focus keyword: <strong>{aiData.seo.focus_keyword}</strong></span>
+          )}
+        </div>
+      )}
       <p className="text-xs text-slate-400">
         Leave blank to auto-generate from the product&apos;s name, material, and description — only set these if you want
         full control over how this product appears in Google search results and AI answer engines.
@@ -750,13 +908,30 @@ function VideosTab({ productId }: { productId: string }) {
 
 type FaqItem = { id?: string; question: string; answer: string };
 
-function FaqTab({ productId }: { productId: string }) {
+function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
   const [faqs, setFaqs] = useState<FaqItem[]>([]);
   const [editing, setEditing] = useState<FaqItem | null>(null);
   const [draft, setDraft] = useState<FaqItem>({ question: "", answer: "" });
   const [mode, setMode] = useState<"create" | "edit">("create");
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  async function importAiFaqs() {
+    if (!aiData?.faq?.length) return;
+    setImporting(true); setMsg(null);
+    try {
+      const created: FaqItem[] = [];
+      for (const item of aiData.faq) {
+        const result = await api(`/products/${productId}/faqs`, "POST", item);
+        created.push(result);
+      }
+      setFaqs((f) => [...f, ...created]);
+      setMsg({ text: `✅ ${created.length} AI FAQs imported successfully!`, ok: true });
+    } catch {
+      setMsg({ text: "Failed to import FAQs. Check API.", ok: false });
+    } finally { setImporting(false); }
+  }
 
   useEffect(() => {
     fetch(`${API}/products/${productId}/faqs`, { cache: "no-store" })
@@ -797,6 +972,31 @@ function FaqTab({ productId }: { productId: string }) {
   return (
     <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      {aiData?.faq?.length && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-violet-900">✨ AI-Generated FAQs Ready</p>
+              <p className="text-xs text-violet-600 mt-0.5">{aiData.faq.length} FAQs generated — একবারে সব import করো</p>
+            </div>
+            <button
+              onClick={importAiFaqs}
+              disabled={importing}
+              className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+            >
+              {importing ? "Importing…" : `Import ${aiData.faq.length} FAQs`}
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {aiData.faq.map((f, i) => (
+              <div key={i} className="rounded-lg bg-white border border-violet-100 px-3 py-2">
+                <p className="text-xs font-semibold text-slate-800">Q: {f.question}</p>
+                <p className="text-xs text-slate-500 mt-0.5">A: {f.answer}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {faqs.length > 0 && (
         <div className="space-y-2">
           {faqs.map((faq, i) => (
@@ -1071,9 +1271,20 @@ export default function ProductTabs({
   initialData: Record<string, unknown>;
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("basic");
+  const [aiData, setAiData] = useState<AiData | undefined>(undefined);
+
+  const handleAiGenerated = useCallback((data: AiData) => {
+    setAiData(data);
+  }, []);
 
   return (
     <div>
+      <AiGenerateBar
+        productId={productId}
+        productName={initialData.name as string | undefined}
+        onGenerated={handleAiGenerated}
+      />
+
       <div className="flex gap-1.5 flex-wrap mb-6">
         {TABS.map((tab) => (
           <button
@@ -1086,20 +1297,23 @@ export default function ProductTabs({
             }`}
           >
             {tab.label}
+            {aiData && ["basic", "seo", "tags", "faq"].includes(tab.id) && (
+              <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-violet-500 align-middle" title="AI content available" />
+            )}
           </button>
         ))}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        {activeTab === "basic"    && <BasicTab    productId={productId} initial={initialData} />}
+        {activeTab === "basic"    && <BasicTab    productId={productId} initial={initialData} aiData={aiData} />}
         {activeTab === "category" && <CategoryTab productId={productId} initial={initialData} />}
         {activeTab === "variants" && <VariantsTab productId={productId} />}
         {activeTab === "price"    && <PriceTab    productId={productId} initial={initialData} />}
-        {activeTab === "tags"     && <TagsTab     productId={productId} initial={initialData} />}
-        {activeTab === "seo"      && <SeoTab      productId={productId} initial={initialData} />}
+        {activeTab === "tags"     && <TagsTab     productId={productId} initial={initialData} aiData={aiData} />}
+        {activeTab === "seo"      && <SeoTab      productId={productId} initial={initialData} aiData={aiData} />}
         {activeTab === "images"   && <ImagesTab   productId={productId} />}
         {activeTab === "videos"   && <VideosTab   productId={productId} />}
-        {activeTab === "faq"      && <FaqTab      productId={productId} />}
+        {activeTab === "faq"      && <FaqTab      productId={productId} aiData={aiData} />}
         {activeTab === "reviews"  && <ReviewsTab  productId={productId} />}
         {activeTab === "status"   && <StatusTab   productId={productId} initial={initialData} />}
       </div>

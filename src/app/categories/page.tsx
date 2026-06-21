@@ -39,74 +39,6 @@ const EMPTY_DRAFT: CreateCategoryDraft = {
   order: "",
 };
 
-const CATEGORIES = [
-  {
-    id: "cat-01",
-    name: "Men's Loafers",
-    slug: "mens-loafers",
-    description: "Full-grain leather loafers handcrafted in Chittagong.",
-    parent_id: null,
-    is_active: true,
-    is_featured: true,
-    show_on_homepage: true,
-    seo_title: "Men's Leather Loafers | RIZZ",
-    seo_description: "Handcrafted genuine leather loafers for men. Made in Bangladesh.",
-    order: 1,
-  },
-  {
-    id: "cat-02",
-    name: "Men's Sandals",
-    slug: "mens-sandals",
-    description: "Premium leather sandals — casual and formal styles.",
-    parent_id: null,
-    is_active: true,
-    is_featured: true,
-    show_on_homepage: true,
-    seo_title: "Men's Leather Sandals | RIZZ",
-    seo_description: "Genuine leather sandals for men, made in Chittagong.",
-    order: 2,
-  },
-  {
-    id: "cat-03",
-    name: "Men's Belts",
-    slug: "mens-belts",
-    description: "Full-grain leather belts with brass hardware.",
-    parent_id: null,
-    is_active: true,
-    is_featured: false,
-    show_on_homepage: false,
-    seo_title: "Men's Leather Belts | RIZZ",
-    seo_description: "Genuine leather belts handcrafted in Bangladesh.",
-    order: 3,
-  },
-  {
-    id: "cat-04",
-    name: "Men's Wallets",
-    slug: "mens-wallets",
-    description: "Slim and bifold leather wallets.",
-    parent_id: null,
-    is_active: true,
-    is_featured: false,
-    show_on_homepage: false,
-    seo_title: "Men's Leather Wallets | RIZZ",
-    seo_description: "Slim genuine leather wallets made in Chittagong.",
-    order: 4,
-  },
-  {
-    id: "cat-05",
-    name: "Men's Half Loafers",
-    slug: "mens-half-loafers",
-    description: "Open-back slip-on loafers — comfort meets craft.",
-    parent_id: null,
-    is_active: true,
-    is_featured: false,
-    show_on_homepage: false,
-    seo_title: "Men's Half Loafers | RIZZ",
-    seo_description: "Leather half loafers handcrafted in Bangladesh.",
-    order: 5,
-  },
-];
-
 const STATUS_STYLES: Record<string, string> = {
   Active: "border-emerald-200 bg-emerald-50 text-emerald-900",
   Draft: "border-amber-200 bg-amber-50 text-amber-900",
@@ -114,7 +46,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function CategoriesPage() {
   const { data: categoriesData, isLoading, error } = useGetCategoriesQuery();
-  const categories = (categoriesData ?? CATEGORIES) as CategoryRecord[];
+  const categories = (categoriesData ?? []) as CategoryRecord[];
   const totalItems = categories.length;
   const activeCount = categories.filter((category) => category.is_active).length;
   const draftCount = categories.filter((category) => !category.is_active).length;
@@ -270,7 +202,11 @@ export default function CategoriesPage() {
                 </div>
               ) : error ? (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                  Unable to load categories. Showing fallback data.
+                  Unable to load categories. Check the API connection.
+                </div>
+              ) : categories.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  No categories yet. Create your first one below.
                 </div>
               ) : null}
 
