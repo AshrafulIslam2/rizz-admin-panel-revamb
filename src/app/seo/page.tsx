@@ -183,7 +183,7 @@ export default function SeoPage() {
 
                 <div className="flex gap-3 pt-2 border-t border-slate-200">
                   <button onClick={save} disabled={saving} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition disabled:opacity-50">
-                    {saving ? "Saving..." : "Save SEO"}
+                    {saving ? "Saving....." : "Save SEO"}
                   </button>
                 </div>
               </>
