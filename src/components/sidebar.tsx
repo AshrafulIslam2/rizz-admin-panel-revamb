@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
   {
@@ -39,6 +39,13 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -101,10 +108,17 @@ export default function Sidebar() {
           href="http://localhost:3000"
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 text-xs text-teal-400 hover:text-teal-300 transition"
+          className="mt-1 block text-xs text-teal-400 hover:text-teal-300 transition"
         >
           View storefront →
         </a>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-3 text-xs text-slate-500 hover:text-rose-400 transition"
+        >
+          Log out
+        </button>
       </div>
     </aside>
   );
