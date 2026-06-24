@@ -5,20 +5,29 @@ import { useState, useEffect, useCallback } from "react";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
 // ─── AI Generated Data Type ───────────────────────────────────────────────────
-type AiData = {
+type AiLang = {
   name?: string;
   short_description?: string;
   description?: string;
   slug?: string;
-  seo?: {
-    meta_title?: string;
-    meta_description?: string;
-    focus_keyword?: string;
-    secondary_keywords?: string[];
-  };
-  tags?: string[];
+  meta_title?: string;
+  meta_description?: string;
+  og_title?: string;
+  og_description?: string;
+  focus_keyword?: string;
+  secondary_keywords?: string[];
   alt_text?: string;
+  tags?: string[];
   faq?: { question: string; answer: string }[];
+};
+
+type AiData = {
+  en?: AiLang;
+  bn?: AiLang;
+  schema?: {
+    product?: Record<string, unknown>;
+    faq_schema?: Record<string, unknown>;
+  };
 };
 
 // ─── AI Generate Bar ──────────────────────────────────────────────────────────
@@ -63,7 +72,26 @@ function AiGenerateBar({
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || "Generation failed");
 
-      onGenerated(json.data as AiData);
+      const raw = json.data;
+      // Support both old flat format and new bilingual format
+      const normalized: AiData = raw.en
+        ? raw
+        : {
+            en: {
+              name: raw.name,
+              short_description: raw.short_description,
+              description: raw.description,
+              slug: raw.slug,
+              meta_title: raw.seo?.meta_title,
+              meta_description: raw.seo?.meta_description,
+              focus_keyword: raw.seo?.focus_keyword,
+              secondary_keywords: raw.seo?.secondary_keywords,
+              alt_text: raw.alt_text,
+              tags: raw.tags,
+              faq: raw.faq,
+            },
+          };
+      onGenerated(normalized);
       setDone(true);
     } catch (e: any) {
       setError(e.message);
@@ -78,7 +106,7 @@ function AiGenerateBar({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-violet-900">✨ AI Content Generator</p>
           <p className="text-xs text-violet-600 mt-0.5">
-            Product image থেকে title, description, SEO, tags ও FAQ — সব auto generate হবে।
+            Product image থেকে English + বাংলা title, description, SEO, tags ও FAQ — সব একসাথে generate হবে।
             {done && <span className="ml-2 font-semibold text-green-700">✅ Applied! নিচের tabs এ দেখো।</span>}
           </p>
         </div>
@@ -103,17 +131,18 @@ const field = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm o
 const lbl = "block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5";
 
 const TABS = [
-  { id: "basic",    label: "Basic Info" },
-  { id: "category", label: "Categories" },
-  { id: "variants", label: "Variants" },
-  { id: "price",    label: "Price & Discount" },
-  { id: "tags",     label: "Tags" },
-  { id: "seo",      label: "SEO" },
-  { id: "images",   label: "Images" },
-  { id: "videos",   label: "Videos" },
-  { id: "faq",      label: "FAQ" },
-  { id: "reviews",  label: "Reviews" },
-  { id: "status",   label: "Status" },
+  { id: "basic",        label: "Basic Info" },
+  { id: "category",     label: "Categories" },
+  { id: "variants",     label: "Variants" },
+  { id: "price",        label: "Price & Discount" },
+  { id: "tags",         label: "Tags" },
+  { id: "seo",          label: "SEO" },
+  { id: "translations", label: "🌐 Translations" },
+  { id: "images",       label: "Images" },
+  { id: "videos",       label: "Videos" },
+  { id: "faq",          label: "FAQ" },
+  { id: "reviews",      label: "Reviews" },
+  { id: "status",       label: "Status" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -179,15 +208,15 @@ function BasicTab({
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [aiApplied, setAiApplied] = useState(false);
 
-  // Apply AI data when it arrives
+  // Apply AI data when it arrives (use EN content)
   useEffect(() => {
-    if (!aiData) return;
+    if (!aiData?.en) return;
     setForm((f) => ({
       ...f,
-      name: aiData.name ?? f.name,
-      slug: aiData.slug ?? f.slug,
-      short_description: aiData.short_description ?? f.short_description,
-      description: aiData.description ?? f.description,
+      name: aiData.en?.name ?? f.name,
+      slug: aiData.en?.slug ?? f.slug,
+      short_description: aiData.en?.short_description ?? f.short_description,
+      description: aiData.en?.description ?? f.description,
     }));
     setAiApplied(true);
   }, [aiData]);
@@ -543,7 +572,7 @@ function TagsTab({
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    if (aiData?.tags?.length) setTags(aiData.tags.join(", "));
+    if (aiData?.en?.tags?.length) setTags(aiData.en.tags.join(", "));
   }, [aiData]);
 
   async function save(e: React.FormEvent) {
@@ -596,9 +625,9 @@ function SeoTab({
   const [aiApplied, setAiApplied] = useState(false);
 
   useEffect(() => {
-    if (!aiData?.seo) return;
-    if (aiData.seo.meta_title) setMetaTitle(aiData.seo.meta_title);
-    if (aiData.seo.meta_description) setMetaDescription(aiData.seo.meta_description);
+    if (!aiData?.en) return;
+    if (aiData.en.meta_title) setMetaTitle(aiData.en.meta_title);
+    if (aiData.en.meta_description) setMetaDescription(aiData.en.meta_description);
     setAiApplied(true);
   }, [aiData]);
 
@@ -627,8 +656,8 @@ function SeoTab({
       {aiApplied && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs text-violet-800">
           ✨ AI SEO content applied! Review and click <strong>Save SEO</strong>.
-          {aiData?.seo?.focus_keyword && (
-            <span className="ml-2 text-violet-600">Focus keyword: <strong>{aiData.seo.focus_keyword}</strong></span>
+          {aiData?.en?.focus_keyword && (
+            <span className="ml-2 text-violet-600">Focus keyword: <strong>{aiData.en.focus_keyword}</strong></span>
           )}
         </div>
       )}
@@ -918,11 +947,12 @@ function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   async function importAiFaqs() {
-    if (!aiData?.faq?.length) return;
+    const faqList = aiData?.en?.faq ?? [];
+    if (!faqList.length) return;
     setImporting(true); setMsg(null);
     try {
       const created: FaqItem[] = [];
-      for (const item of aiData.faq) {
+      for (const item of faqList) {
         const result = await api(`/products/${productId}/faqs`, "POST", item);
         created.push(result);
       }
@@ -972,23 +1002,23 @@ function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
   return (
     <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
-      {aiData?.faq?.length && (
+      {(aiData?.en?.faq?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-violet-900">✨ AI-Generated FAQs Ready</p>
-              <p className="text-xs text-violet-600 mt-0.5">{aiData.faq.length} FAQs generated — একবারে সব import করো</p>
+              <p className="text-sm font-semibold text-violet-900">✨ AI-Generated FAQs (English) Ready</p>
+              <p className="text-xs text-violet-600 mt-0.5">{aiData!.en!.faq!.length} FAQs — একবারে সব import করো</p>
             </div>
             <button
               onClick={importAiFaqs}
               disabled={importing}
               className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
             >
-              {importing ? "Importing…" : `Import ${aiData.faq.length} FAQs`}
+              {importing ? "Importing…" : `Import ${aiData!.en!.faq!.length} FAQs`}
             </button>
           </div>
           <div className="mt-3 space-y-2">
-            {aiData.faq.map((f, i) => (
+            {aiData!.en!.faq!.map((f, i) => (
               <div key={i} className="rounded-lg bg-white border border-violet-100 px-3 py-2">
                 <p className="text-xs font-semibold text-slate-800">Q: {f.question}</p>
                 <p className="text-xs text-slate-500 mt-0.5">A: {f.answer}</p>
@@ -1196,7 +1226,150 @@ function ReviewsTab({ productId }: { productId: string }) {
   );
 }
 
-// ─── Status ──────────────────────────────────────────────────────────────────
+// ─── Translations (Bangla) ───────────────────────────────────────────────────
+
+function TranslationTab({
+  productId,
+  aiData,
+}: {
+  productId: string;
+  aiData?: AiData;
+}) {
+  const [langTab, setLangTab] = useState<"bn">("bn");
+  const [form, setForm] = useState({
+    name: "",
+    short_description: "",
+    description: "",
+    seo_title: "",
+    seo_description: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [aiApplied, setAiApplied] = useState(false);
+  const [existingId, setExistingId] = useState<string | null>(null);
+
+  // Load existing BN translation
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API}/products/${productId}/translations`, { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : [])
+      .then((d) => {
+        const list: any[] = Array.isArray(d) ? d : d?.translations ?? [];
+        const bn = list.find((t: any) => t.lang_code === "bn");
+        if (bn) {
+          setExistingId(bn.id ?? null);
+          setForm({
+            name: bn.name ?? "",
+            short_description: bn.short_description ?? "",
+            description: bn.description ?? "",
+            seo_title: bn.seo_title ?? "",
+            seo_description: bn.seo_description ?? "",
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [productId]);
+
+  // Apply AI BN content when aiData changes
+  useEffect(() => {
+    if (!aiData?.bn) return;
+    setForm((f) => ({
+      name: aiData.bn?.name ?? f.name,
+      short_description: aiData.bn?.short_description ?? f.short_description,
+      description: aiData.bn?.description ?? f.description,
+      seo_title: aiData.bn?.meta_title ?? f.seo_title,
+      seo_description: aiData.bn?.meta_description ?? f.seo_description,
+    }));
+    setAiApplied(true);
+  }, [aiData]);
+
+  function set(k: keyof typeof form, v: string) { setForm((f) => ({ ...f, [k]: v })); }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try {
+      const payload = { ...form, lang_code: "bn" };
+      if (existingId) {
+        await api(`/products/${productId}/translations/bn`, "PATCH", payload);
+      } else {
+        const created = await api(`/products/${productId}/translations`, "POST", payload);
+        setExistingId(created?.id ?? null);
+      }
+      setMsg({ text: "বাংলা translation saved ✅", ok: true });
+    } catch {
+      setMsg({ text: "Failed to save. Check API.", ok: false });
+    } finally { setSaving(false); }
+  }
+
+  if (loading) return <p className="text-sm text-slate-400 py-4">Loading translations…</p>;
+
+  return (
+    <form onSubmit={save} className="space-y-5">
+      {msg && <Msg text={msg.text} ok={msg.ok} />}
+      {aiApplied && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs text-violet-800">
+          ✨ AI বাংলা content applied! Review করো এবং <strong>Save Translation</strong> চাপো।
+        </div>
+      )}
+      {!aiData?.bn && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+          💡 উপরের <strong>Generate AI Content</strong> বাটনে চাপলে বাংলা content automatically fill হবে।
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        <span className="text-lg">🇧🇩</span> বাংলা (Bengali) Translation
+      </div>
+
+      <div>
+        <p className={lbl}>নাম (Name)</p>
+        <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="যেমন: প্রিমিয়াম চামড়ার লোফার" className={field} />
+      </div>
+      <div>
+        <p className={lbl}>সংক্ষিপ্ত বিবরণ (Short Description)</p>
+        <input value={form.short_description} onChange={(e) => set("short_description", e.target.value)} placeholder="২-৩ বাক্যে পণ্যের বিবরণ" className={field} />
+      </div>
+      <div>
+        <p className={lbl}>বিস্তারিত বিবরণ (Description)</p>
+        <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} placeholder="পণ্যের বিস্তারিত বিবরণ লিখুন…" className={field + " resize-none"} />
+      </div>
+
+      <div className="border-t border-slate-200 pt-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">🔍 বাংলা SEO</p>
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between">
+              <p className={lbl}>Meta Title (বাংলা)</p>
+              <span className={`text-xs ${form.seo_title.length > 60 ? "text-rose-500" : "text-slate-400"}`}>{form.seo_title.length}/60</span>
+            </div>
+            <input value={form.seo_title} onChange={(e) => set("seo_title", e.target.value)} placeholder="যেমন: বাংলাদেশের সেরা চামড়ার জুতা | RIZZ Leather" className={field} />
+          </div>
+          <div>
+            <div className="flex items-center justify-between">
+              <p className={lbl}>Meta Description (বাংলা)</p>
+              <span className={`text-xs ${form.seo_description.length > 160 ? "text-rose-500" : "text-slate-400"}`}>{form.seo_description.length}/160</span>
+            </div>
+            <textarea value={form.seo_description} onChange={(e) => set("seo_description", e.target.value)} rows={3} placeholder="বাংলায় meta description লিখুন..." className={field + " resize-none"} />
+          </div>
+        </div>
+      </div>
+
+      {(form.seo_title || form.name) && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs text-slate-400">rizzleather.com/brand/catalog/...?lang=bn</p>
+          <p className="mt-0.5 text-base text-blue-700 truncate">{form.seo_title || form.name}</p>
+          <p className="mt-0.5 text-sm text-slate-600 line-clamp-2">{form.seo_description || form.short_description || "No description."}</p>
+        </div>
+      )}
+
+      <SaveBtn saving={saving} label="Save Translation" />
+    </form>
+  );
+}
+
+// --- Status -----------------------------------------------------------------
 
 function StatusTab({ productId, initial }: { productId: string; initial: Record<string, unknown> }) {
   const [form, setForm] = useState({
@@ -1261,7 +1434,7 @@ function StatusTab({ productId, initial }: { productId: string; initial: Record<
   );
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
+// --- Root -------------------------------------------------------------------
 
 export default function ProductTabs({
   productId,
@@ -1297,7 +1470,7 @@ export default function ProductTabs({
             }`}
           >
             {tab.label}
-            {aiData && ["basic", "seo", "tags", "faq"].includes(tab.id) && (
+            {aiData && ["basic", "seo", "tags", "faq", "translations"].includes(tab.id) && (
               <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-violet-500 align-middle" title="AI content available" />
             )}
           </button>
@@ -1305,17 +1478,18 @@ export default function ProductTabs({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        {activeTab === "basic"    && <BasicTab    productId={productId} initial={initialData} aiData={aiData} />}
-        {activeTab === "category" && <CategoryTab productId={productId} initial={initialData} />}
-        {activeTab === "variants" && <VariantsTab productId={productId} />}
-        {activeTab === "price"    && <PriceTab    productId={productId} initial={initialData} />}
-        {activeTab === "tags"     && <TagsTab     productId={productId} initial={initialData} aiData={aiData} />}
-        {activeTab === "seo"      && <SeoTab      productId={productId} initial={initialData} aiData={aiData} />}
-        {activeTab === "images"   && <ImagesTab   productId={productId} />}
-        {activeTab === "videos"   && <VideosTab   productId={productId} />}
-        {activeTab === "faq"      && <FaqTab      productId={productId} aiData={aiData} />}
-        {activeTab === "reviews"  && <ReviewsTab  productId={productId} />}
-        {activeTab === "status"   && <StatusTab   productId={productId} initial={initialData} />}
+        {activeTab === "basic"        && <BasicTab       productId={productId} initial={initialData} aiData={aiData} />}
+        {activeTab === "category"     && <CategoryTab    productId={productId} initial={initialData} />}
+        {activeTab === "variants"     && <VariantsTab    productId={productId} />}
+        {activeTab === "price"        && <PriceTab       productId={productId} initial={initialData} />}
+        {activeTab === "tags"         && <TagsTab        productId={productId} initial={initialData} aiData={aiData} />}
+        {activeTab === "seo"          && <SeoTab         productId={productId} initial={initialData} aiData={aiData} />}
+        {activeTab === "translations" && <TranslationTab productId={productId} aiData={aiData} />}
+        {activeTab === "images"       && <ImagesTab      productId={productId} />}
+        {activeTab === "videos"       && <VideosTab      productId={productId} />}
+        {activeTab === "faq"          && <FaqTab         productId={productId} aiData={aiData} />}
+        {activeTab === "reviews"      && <ReviewsTab     productId={productId} />}
+        {activeTab === "status"       && <StatusTab      productId={productId} initial={initialData} />}
       </div>
     </div>
   );
