@@ -13,6 +13,8 @@ const NAV = [
     section: "Commerce",
     items: [
       { label: "Orders", href: "/orders", icon: "◫" },
+      { label: "Checkout Leads", href: "/checkout-leads", icon: "☏" },
+      { label: "Delivery", href: "/delivery", icon: "▣" },
       { label: "Products", href: "/products", icon: "◻" },
       { label: "Categories", href: "/categories", icon: "◈" },
       { label: "Reviews", href: "/reviews", icon: "◇" },

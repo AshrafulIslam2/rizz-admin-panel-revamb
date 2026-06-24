@@ -184,6 +184,95 @@ function SaveBtn({ saving, label = "Save Changes" }: { saving: boolean; label?: 
   );
 }
 
+// ─── Refinable Textarea (write a draft, AI refines it on click) ──────────────
+
+function RefinableTextarea({
+  label,
+  fieldType,
+  value,
+  onChange,
+  productName,
+  category,
+  placeholder,
+}: {
+  label: string;
+  fieldType: "specs" | "craftsmanship";
+  value: string;
+  onChange: (v: string) => void;
+  productName?: string;
+  category?: string;
+  placeholder?: string;
+}) {
+  const [refining, setRefining] = useState(false);
+  const [refined, setRefined] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRefine() {
+    if (!value.trim()) { setError("Write a few notes first, then click AI Generate."); return; }
+    setRefining(true); setError(null);
+    try {
+      const res = await fetch("/api/refine-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fieldType, draft: value, productName, category }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Refine failed");
+      setRefined(data.refined);
+    } catch (e: any) {
+      setError(e.message || "Failed to refine. Check API.");
+    } finally {
+      setRefining(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <p className={lbl}>{label}</p>
+        <button
+          type="button"
+          onClick={handleRefine}
+          disabled={refining}
+          className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+        >
+          {refining ? "Refining…" : "✨ AI Generate"}
+        </button>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={4}
+        placeholder={placeholder}
+        className={field + " resize-none"}
+      />
+      {error && <p className="mt-1 text-xs text-rose-600">{error}</p>}
+      {refined && (
+        <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">AI-Refined Version</p>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap">{refined}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { onChange(refined); setRefined(null); }}
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
+            >
+              Use This Version
+            </button>
+            <button
+              type="button"
+              onClick={() => setRefined(null)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Basic Info ──────────────────────────────────────────────────────────────
 
 function BasicTab({
@@ -203,6 +292,9 @@ function BasicTab({
     description: (initial.description as string) ?? "",
     material: (initial.material as string) ?? "",
     gender: (initial.gender as string) ?? "unisex",
+    specs: (initial.specs as string) ?? "",
+    craftsmanship: (initial.craftsmanship as string) ?? "",
+    free_delivery: (initial.free_delivery as boolean) ?? false,
   });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -278,6 +370,34 @@ function BasicTab({
           </select>
         </div>
       </div>
+      <RefinableTextarea
+        label="Specs & Dimensions"
+        fieldType="specs"
+        value={form.specs}
+        onChange={(v) => set("specs", v)}
+        productName={form.name}
+        placeholder="Write rough notes — sizes, weight, dimensions — then click AI Generate to clean it up."
+      />
+      <RefinableTextarea
+        label="Craftsmanship & Materials"
+        fieldType="craftsmanship"
+        value={form.craftsmanship}
+        onChange={(v) => set("craftsmanship", v)}
+        productName={form.name}
+        placeholder="Write rough notes — materials, how it's made — then click AI Generate to clean it up."
+      />
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <input
+          type="checkbox"
+          checked={form.free_delivery}
+          onChange={(e) => setForm((f) => ({ ...f, free_delivery: e.target.checked }))}
+          className="mt-0.5 h-4 w-4 accent-violet-600"
+        />
+        <span>
+          <span className="block text-sm font-medium text-slate-900">Free Delivery for this product</span>
+          <span className="block text-xs text-slate-500">If a customer orders this product, delivery is free for that order — regardless of the sitewide delivery fee.</span>
+        </span>
+      </label>
       <SaveBtn saving={saving} />
     </form>
   );
@@ -935,32 +1055,32 @@ function VideosTab({ productId }: { productId: string }) {
 
 // ─── FAQ ─────────────────────────────────────────────────────────────────────
 
-type FaqItem = { id?: string; question: string; answer: string };
+type FaqItem = { id?: string; question: string; answer: string; lang_code?: string };
 
 function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
   const [faqs, setFaqs] = useState<FaqItem[]>([]);
   const [editing, setEditing] = useState<FaqItem | null>(null);
-  const [draft, setDraft] = useState<FaqItem>({ question: "", answer: "" });
+  const [draft, setDraft] = useState<FaqItem>({ question: "", answer: "", lang_code: "en" });
   const [mode, setMode] = useState<"create" | "edit">("create");
   const [saving, setSaving] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState<"en" | "bn" | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
-  async function importAiFaqs() {
-    const faqList = aiData?.en?.faq ?? [];
+  async function importAiFaqs(lang: "en" | "bn") {
+    const faqList = aiData?.[lang]?.faq ?? [];
     if (!faqList.length) return;
-    setImporting(true); setMsg(null);
+    setImporting(lang); setMsg(null);
     try {
       const created: FaqItem[] = [];
       for (const item of faqList) {
-        const result = await api(`/products/${productId}/faqs`, "POST", item);
+        const result = await api(`/products/${productId}/faqs`, "POST", { ...item, lang_code: lang });
         created.push(result);
       }
       setFaqs((f) => [...f, ...created]);
-      setMsg({ text: `✅ ${created.length} AI FAQs imported successfully!`, ok: true });
+      setMsg({ text: `✅ ${created.length} AI FAQs (${lang.toUpperCase()}) imported successfully!`, ok: true });
     } catch {
       setMsg({ text: "Failed to import FAQs. Check API.", ok: false });
-    } finally { setImporting(false); }
+    } finally { setImporting(null); }
   }
 
   useEffect(() => {
@@ -970,8 +1090,8 @@ function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
       .catch(() => {});
   }, [productId]);
 
-  function openEdit(faq: FaqItem) { setEditing(faq); setDraft({ ...faq }); setMode("edit"); }
-  function openCreate() { setEditing(null); setDraft({ question: "", answer: "" }); setMode("create"); }
+  function openEdit(faq: FaqItem) { setEditing(faq); setDraft({ ...faq, lang_code: faq.lang_code ?? "en" }); setMode("edit"); }
+  function openCreate() { setEditing(null); setDraft({ question: "", answer: "", lang_code: "en" }); setMode("create"); }
 
   async function save() {
     if (!draft.question || !draft.answer) { setMsg({ text: "Question and answer are required.", ok: false }); return; }
@@ -1002,37 +1122,46 @@ function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
   return (
     <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
-      {(aiData?.en?.faq?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-violet-900">✨ AI-Generated FAQs (English) Ready</p>
-              <p className="text-xs text-violet-600 mt-0.5">{aiData!.en!.faq!.length} FAQs — একবারে সব import করো</p>
-            </div>
-            <button
-              onClick={importAiFaqs}
-              disabled={importing}
-              className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-            >
-              {importing ? "Importing…" : `Import ${aiData!.en!.faq!.length} FAQs`}
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {aiData!.en!.faq!.map((f, i) => (
-              <div key={i} className="rounded-lg bg-white border border-violet-100 px-3 py-2">
-                <p className="text-xs font-semibold text-slate-800">Q: {f.question}</p>
-                <p className="text-xs text-slate-500 mt-0.5">A: {f.answer}</p>
+      {(["en", "bn"] as const).map((lang) => {
+        const faqList = aiData?.[lang]?.faq ?? [];
+        if (faqList.length === 0) return null;
+        return (
+          <div key={lang} className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-violet-900">✨ AI-Generated FAQs ({lang === "en" ? "English" : "Bangla"}) Ready</p>
+                <p className="text-xs text-violet-600 mt-0.5">{faqList.length} FAQs — একবারে সব import করো</p>
               </div>
-            ))}
+              <button
+                onClick={() => importAiFaqs(lang)}
+                disabled={importing === lang}
+                className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+              >
+                {importing === lang ? "Importing…" : `Import ${faqList.length} FAQs`}
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {faqList.map((f, i) => (
+                <div key={i} className="rounded-lg bg-white border border-violet-100 px-3 py-2">
+                  <p className="text-xs font-semibold text-slate-800">Q: {f.question}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">A: {f.answer}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })}
       {faqs.length > 0 && (
         <div className="space-y-2">
           {faqs.map((faq, i) => (
             <div key={faq.id ?? i} className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${faq.lang_code === "bn" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+                      {(faq.lang_code ?? "en").toUpperCase()}
+                    </span>
+                  </div>
                   <p className="font-medium text-slate-900 text-sm">{faq.question}</p>
                   <p className="mt-1 text-xs text-slate-500 line-clamp-2">{faq.answer}</p>
                 </div>
@@ -1047,6 +1176,13 @@ function FaqTab({ productId, aiData }: { productId: string; aiData?: AiData }) {
       )}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
         <p className="text-sm font-semibold text-slate-700">{mode === "create" ? "Add FAQ" : "Edit FAQ"}</p>
+        <div>
+          <p className={lbl}>Language</p>
+          <select value={draft.lang_code ?? "en"} onChange={(e) => setDraft((d) => ({ ...d, lang_code: e.target.value }))} className={field}>
+            <option value="en">English</option>
+            <option value="bn">Bangla</option>
+          </select>
+        </div>
         <div>
           <p className={lbl}>Question</p>
           <input value={draft.question} onChange={(e) => setDraft((d) => ({ ...d, question: e.target.value }))} placeholder="Is this available in wide fit?" className={field} />

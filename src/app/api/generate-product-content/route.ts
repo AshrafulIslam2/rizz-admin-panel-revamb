@@ -114,7 +114,7 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
 
     const response = await client.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [
         {
           role: "user",
@@ -127,10 +127,22 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
     });
 
     const raw = response.content[0].type === "text" ? response.content[0].text : "";
+
+    if (response.stop_reason === "max_tokens") {
+      console.error("[generate-product-content] Response truncated (hit max_tokens). Raw output:", raw);
+      throw new Error("AI response was cut off before finishing — please try again.");
+    }
+
     const match = raw.match(/```json\n?([\s\S]*?)\n?```/) || raw.match(/(\{[\s\S]*\})/);
     if (!match) throw new Error("Could not parse AI response");
 
-    const data = JSON.parse(match[1]);
+    let data: any;
+    try {
+      data = JSON.parse(match[1]);
+    } catch (parseErr) {
+      console.error("[generate-product-content] JSON.parse failed. Raw AI output:\n", raw);
+      throw new Error("AI returned malformed content — please try again.");
+    }
 
     // Build FAQ schema from EN FAQs
     if (data.en?.faq && data.schema?.faq_schema) {

@@ -17,6 +17,7 @@ type BrandingData = {
   social_facebook: string;
   social_tiktok: string;
   social_youtube: string;
+  social_linkedin: string;
 };
 
 const DEFAULT: BrandingData = {
@@ -32,6 +33,7 @@ const DEFAULT: BrandingData = {
   social_facebook: "",
   social_tiktok: "",
   social_youtube: "",
+  social_linkedin: "",
 };
 
 export default function BrandingPage() {
@@ -175,11 +177,12 @@ export default function BrandingPage() {
         {activeTab === "social" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
             <h2 className="font-semibold text-slate-900">Social Links</h2>
-            <p className="text-xs text-slate-400">Saved here; footer currently does not read these yet — ask if you want them wired up.</p>
+            <p className="text-xs text-slate-400">Shown as icons in the site footer. Leave blank to hide a platform.</p>
 
             {[
               { key: "social_instagram" as const, label: "Instagram URL", placeholder: "https://instagram.com/rizzleatherbd" },
               { key: "social_facebook" as const, label: "Facebook URL", placeholder: "https://facebook.com/rizzleatherbd" },
+              { key: "social_linkedin" as const, label: "LinkedIn URL", placeholder: "https://linkedin.com/company/rizzleatherbd" },
               { key: "social_tiktok" as const, label: "TikTok URL", placeholder: "https://tiktok.com/@rizzleatherbd" },
               { key: "social_youtube" as const, label: "YouTube URL", placeholder: "https://youtube.com/@rizzleatherbd" },
             ].map(({ key, label, placeholder }) => (
