@@ -6,15 +6,25 @@ type Product = {
   description?: string
   sku?: string
   price?: number
+  stock_qty?: number
   media?: { media_url: string; is_primary: boolean }[]
-  variants?: { price: number; sale_price?: number | null }[]
+  variants?: { price: number; sale_price?: number | null; stock_qty?: number }[]
 }
+
+const LOW_STOCK_THRESHOLD = 6
 
 function cardPrice(p: Product): number {
   if (p.variants && p.variants.length > 0) {
     return Math.min(...p.variants.map((v) => v.sale_price ?? v.price))
   }
   return p.price ?? 0
+}
+
+function totalStock(p: Product): number {
+  if (p.variants && p.variants.length > 0) {
+    return p.variants.reduce((sum, v) => sum + (v.stock_qty ?? 0), 0)
+  }
+  return p.stock_qty ?? 0
 }
 
 function cardImage(p: Product): string | null {
@@ -70,6 +80,8 @@ export default async function ProductsPage() {
           {products.map((p: Product) => {
             const img = cardImage(p)
             const price = cardPrice(p)
+            const stock = totalStock(p)
+            const isLowStock = stock <= LOW_STOCK_THRESHOLD
             return (
               <div key={p.id} className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
                 <div className="flex items-start gap-4">
@@ -85,7 +97,14 @@ export default async function ProductsPage() {
                           {p.name}
                         </Link>
                       </h2>
-                      <span className="rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 shrink-0">Live</span>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1">Live</span>
+                        {isLowStock && (
+                          <span className="rounded-full bg-red-50 text-red-700 text-xs font-semibold px-3 py-1">
+                            Low Stock ({stock})
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-slate-600 mt-1 line-clamp-2">{p.description}</p>
                   </div>

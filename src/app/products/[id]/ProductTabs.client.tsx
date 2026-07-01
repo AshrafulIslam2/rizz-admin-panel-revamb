@@ -450,13 +450,25 @@ function CategoryTab({ productId, initial }: { productId: string; initial: Recor
 
 type Variant = { id?: string; size: string; color: string; price: string; salePrice?: string; stock: string };
 
+type VariantEdit = { size: string; color: string; price: string; sale_price: string; stock_qty: string };
+
 function VariantsTab({ productId }: { productId: string }) {
   const [variants, setVariants] = useState<any[]>([]);
   const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", salePrice: "", stock: "0" });
-  const [edits, setEdits] = useState<Record<string, { price: string; sale_price: string }>>({});
+  const [edits, setEdits] = useState<Record<string, VariantEdit>>({});
   const [savingRow, setSavingRow] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  function toEdit(v: any): VariantEdit {
+    return {
+      size: String(v.attributes?.size ?? v.size ?? ""),
+      color: String(v.attributes?.color ?? v.color ?? ""),
+      price: String(v.price ?? ""),
+      sale_price: String(v.sale_price ?? ""),
+      stock_qty: String(v.stock_qty ?? v.stock ?? 0),
+    };
+  }
 
   useEffect(() => {
     fetch(`${API}/products/${productId}/variants`, { cache: "no-store" })
@@ -464,8 +476,8 @@ function VariantsTab({ productId }: { productId: string }) {
       .then((d) => {
         const list = Array.isArray(d) ? d : d?.variants ?? [];
         setVariants(list);
-        const init: Record<string, { price: string; sale_price: string }> = {};
-        list.forEach((v: any) => { if (v.id) init[v.id] = { price: String(v.price ?? ""), sale_price: String(v.sale_price ?? "") }; });
+        const init: Record<string, VariantEdit> = {};
+        list.forEach((v: any) => { if (v.id) init[v.id] = toEdit(v); });
         setEdits(init);
       })
       .catch(() => {});
@@ -495,7 +507,7 @@ function VariantsTab({ productId }: { productId: string }) {
     } finally { setSaving(false); }
   }
 
-  async function savePricing(id: string) {
+  async function saveVariant(id: string) {
     const e = edits[id];
     if (!e) return;
     setSavingRow(id); setMsg(null);
@@ -503,11 +515,15 @@ function VariantsTab({ productId }: { productId: string }) {
       const updated = await api(`/products/${productId}/variants/${id}`, "PATCH", {
         price: Number(e.price),
         sale_price: e.sale_price ? Number(e.sale_price) : null,
+        stock_qty: Number(e.stock_qty),
+        attributes: { size: e.size, color: e.color },
+        variant_name: `${e.size} / ${e.color}`,
       });
       setVariants((vs) => vs.map((v) => v.id === id ? updated : v));
-      setMsg({ text: "Variant pricing updated.", ok: true });
+      setEdits((ed) => ({ ...ed, [id]: toEdit(updated) }));
+      setMsg({ text: "Variant updated.", ok: true });
     } catch {
-      setMsg({ text: "Failed to update pricing. Check API.", ok: false });
+      setMsg({ text: "Failed to update variant. Check API.", ok: false });
     } finally { setSavingRow(null); }
   }
 
@@ -537,12 +553,29 @@ function VariantsTab({ productId }: { productId: string }) {
             <tbody className="divide-y divide-slate-100">
               {variants.map((v, i) => {
                 const id = v.id ?? String(i);
-                const rowEdit = edits[id] ?? { price: String(v.price ?? ""), sale_price: String(v.sale_price ?? "") };
-                const dirty = v.id && (rowEdit.price !== String(v.price ?? "") || rowEdit.sale_price !== String(v.sale_price ?? ""));
+                const rowEdit = edits[id] ?? toEdit(v);
+                const original = toEdit(v);
+                const dirty = !!v.id && JSON.stringify(rowEdit) !== JSON.stringify(original);
                 return (
                   <tr key={id}>
-                    <td className="px-4 py-2.5 font-medium">{v.attributes?.size ?? v.size}</td>
-                    <td className="px-4 py-2.5">{v.attributes?.color ?? v.color}</td>
+                    <td className="px-4 py-2.5">
+                      <select
+                        value={rowEdit.size}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, size: e.target.value } }))}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                      >
+                        {SIZES.map((s) => <option key={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <select
+                        value={rowEdit.color}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, color: e.target.value } }))}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                      >
+                        {COLORS.map((c) => <option key={c}>{c}</option>)}
+                      </select>
+                    </td>
                     <td className="px-4 py-2.5">
                       <input
                         type="number"
@@ -560,10 +593,17 @@ function VariantsTab({ productId }: { productId: string }) {
                         className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
                       />
                     </td>
-                    <td className="px-4 py-2.5">{v.stock_qty ?? v.stock ?? 0}</td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="number"
+                        value={rowEdit.stock_qty}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, stock_qty: e.target.value } }))}
+                        className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                      />
+                    </td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       {dirty && (
-                        <button onClick={() => savePricing(id)} disabled={savingRow === id} className="mr-3 text-xs font-semibold text-teal-700 hover:text-teal-900 disabled:opacity-50">
+                        <button onClick={() => saveVariant(id)} disabled={savingRow === id} className="mr-3 text-xs font-semibold text-teal-700 hover:text-teal-900 disabled:opacity-50">
                           {savingRow === id ? "Saving…" : "Save"}
                         </button>
                       )}
