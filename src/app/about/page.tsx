@@ -6,6 +6,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
 type Value = { title: string; body: string };
 type TimelineItem = { year: string; event: string };
+type FaqItem = { q: string; a: string };
 
 type AboutData = {
   heroImage: string;
@@ -14,6 +15,7 @@ type AboutData = {
   timeline: TimelineItem[];
   quoteText: string;
   quoteAuthor: string;
+  faq: FaqItem[];
 };
 
 const DEFAULT: AboutData = {
@@ -38,18 +40,24 @@ const DEFAULT: AboutData = {
   ],
   quoteText: "Every pair that leaves our workshop carries a piece of Chittagong with it.",
   quoteAuthor: "The Rizz Atelier",
+  faq: [
+    { q: "Where are RIZZ products made?", a: "All RIZZ products are handcrafted in Chittagong, Bangladesh — in our own workshop by our own craftsmen." },
+    { q: "Is the leather genuine?", a: "Yes. We use only genuine leather — full-grain, vegetable-tanned, suede, or embossed calfskin. No synthetic or bonded leather." },
+    { q: "Do you offer a warranty?", a: "Yes. All products come with a one-year craftsmanship warranty covering stitching, hardware, and structural defects." },
+    { q: "Can I visit the workshop?", a: "We welcome visits by appointment. Contact us via WhatsApp or email to arrange a visit to our Chittagong atelier." },
+  ],
 };
 
 export default function AboutPage() {
   const [data, setData] = useState<AboutData>(DEFAULT);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"story" | "values" | "timeline">("story");
+  const [activeTab, setActiveTab] = useState<"story" | "values" | "timeline" | "faq">("story");
 
   useEffect(() => {
     fetch(`${API}/about`, { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setData(d); })
+      .then((d) => { if (d) setData((prev) => ({ ...prev, ...d, faq: d.faq ?? prev.faq })); })
       .catch(() => {});
   }, []);
 
@@ -93,6 +101,12 @@ export default function AboutPage() {
   function addTimeline() { setData((d) => ({ ...d, timeline: [...d.timeline, { year: "", event: "" }] })); }
   function removeTimeline(i: number) { setData((d) => ({ ...d, timeline: d.timeline.filter((_, idx) => idx !== i) })); }
 
+  function updateFaq(i: number, key: keyof FaqItem, val: string) {
+    setData((d) => { const f = [...d.faq]; f[i] = { ...f[i], [key]: val }; return { ...d, faq: f }; });
+  }
+  function addFaq() { setData((d) => ({ ...d, faq: [...d.faq, { q: "", a: "" }] })); }
+  function removeFaq(i: number) { setData((d) => ({ ...d, faq: d.faq.filter((_, idx) => idx !== i) })); }
+
   const field = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-teal-400 w-full";
   const lbl = "block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5";
 
@@ -128,7 +142,7 @@ export default function AboutPage() {
 
         {/* Tabs */}
         <div className="flex gap-2">
-          {(["story", "values", "timeline"] as const).map((t) => (
+          {(["story", "values", "timeline", "faq"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
@@ -191,6 +205,36 @@ export default function AboutPage() {
               </div>
             ))}
             <button onClick={addTimeline} className="text-sm text-teal-600 hover:text-teal-700 font-medium">+ Add milestone</button>
+          </section>
+        )}
+
+        {/* FAQ */}
+        {activeTab === "faq" && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+            <h2 className="font-semibold text-slate-900">About Page FAQs</h2>
+            <p className="text-xs text-slate-400">/about page এর নিচে accordion হিসেবে দেখায়। যতগুলো দরকার add করুন।</p>
+            {data.faq.map((item, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-500">FAQ {i + 1}</p>
+                  <button onClick={() => removeFaq(i)} className="text-xs text-rose-500 hover:text-rose-700">Remove</button>
+                </div>
+                <input
+                  value={item.q}
+                  onChange={(e) => updateFaq(i, "q", e.target.value)}
+                  placeholder="Question"
+                  className={field}
+                />
+                <textarea
+                  value={item.a}
+                  onChange={(e) => updateFaq(i, "a", e.target.value)}
+                  rows={2}
+                  placeholder="Answer"
+                  className={field + " resize-none"}
+                />
+              </div>
+            ))}
+            <button onClick={addFaq} className="text-sm text-teal-600 hover:text-teal-700 font-medium">+ Add FAQ</button>
           </section>
         )}
 

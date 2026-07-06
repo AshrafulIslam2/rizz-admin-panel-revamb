@@ -151,13 +151,11 @@ export default function BrandingPage() {
         {activeTab === "contact" && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
             <h2 className="font-semibold text-slate-900">Contact Information</h2>
-            <p className="text-xs text-slate-400">These values are saved here, but the storefront footer/contact page currently use hardcoded text — ask if you want those wired up to read from here.</p>
 
             {[
               { key: "contact_whatsapp" as const, label: "WhatsApp Number (no spaces)", placeholder: "8801750514197" },
               { key: "contact_whatsapp_display" as const, label: "WhatsApp Display Format", placeholder: "+880 175 051 4197" },
               { key: "contact_email" as const, label: "Email Address", placeholder: "rizzleatherbd@gmail.com" },
-              { key: "contact_location" as const, label: "Location", placeholder: "Chittagong, Bangladesh" },
               { key: "contact_shipping" as const, label: "Shipping Destinations", placeholder: "Bangladesh · USA · Europe · Middle East" },
             ].map(({ key, label, placeholder }) => (
               <div key={key}>
@@ -165,6 +163,18 @@ export default function BrandingPage() {
                 <input value={data[key]} onChange={(e) => set(key, e.target.value)} placeholder={placeholder} className={field} />
               </div>
             ))}
+
+            <div>
+              <p className={lbl}>Locations / Outlets</p>
+              <p className="text-xs text-slate-400 mb-2">প্রতিটা address আলাদা line-এ লিখুন — factory, outlet, showroom সব। Contact page-এ আলাদা করে দেখাবে।</p>
+              <textarea
+                value={data.contact_location}
+                onChange={(e) => set("contact_location", e.target.value)}
+                rows={5}
+                placeholder={"Factory: 123 Leather Lane, Chittagong, Bangladesh\nDhaka Outlet: Shop 12, Bashundhara City, Dhaka\nShowroom: 45 Agrabad, Chittagong"}
+                className={field + " resize-y"}
+              />
+            </div>
 
             <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
               <span className="font-semibold">WhatsApp link: </span>
