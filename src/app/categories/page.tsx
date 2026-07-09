@@ -9,6 +9,8 @@ import {
   type CategoryRecord,
 } from "@/lib/slices/apiSlice";
 
+type FaqItem = { q: string; a: string };
+
 type CreateCategoryDraft = {
   name: string;
   slug: string;
@@ -21,6 +23,8 @@ type CreateCategoryDraft = {
   banner_image: string;
   seo_title: string;
   seo_description: string;
+  page_intro: string;
+  extra_faq: FaqItem[];
   order: string;
 };
 
@@ -36,6 +40,8 @@ const EMPTY_DRAFT: CreateCategoryDraft = {
   banner_image: "",
   seo_title: "",
   seo_description: "",
+  page_intro: "",
+  extra_faq: [],
   order: "",
 };
 
@@ -80,6 +86,8 @@ export default function CategoriesPage() {
       banner_image: draft.banner_image.trim() || undefined,
       seo_title: draft.seo_title.trim() || undefined,
       seo_description: draft.seo_description.trim() || undefined,
+      page_intro: draft.page_intro.trim() || undefined,
+      extra_faq: draft.extra_faq.filter((f) => f.q.trim() && f.a.trim()),
       order: typeof orderValue === "number" && !Number.isNaN(orderValue) ? orderValue : undefined,
     };
 
@@ -120,6 +128,8 @@ export default function CategoriesPage() {
       banner_image: category.banner_image ?? "",
       seo_title: category.seo_title ?? "",
       seo_description: category.seo_description ?? "",
+      page_intro: category.page_intro ?? "",
+      extra_faq: Array.isArray(category.extra_faq) ? category.extra_faq : [],
       order: category.order !== undefined && category.order !== null ? String(category.order) : "",
     });
     setEditingId(category.id);
@@ -402,6 +412,69 @@ export default function CategoriesPage() {
                       className="min-h-[80px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
                     />
                   </label>
+
+                  {/* Page Intro Text */}
+                  <div className="grid gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Page Intro Text</span>
+                    <p className="text-xs text-slate-400">Product grid-এর উপরে, heading-এর নিচে দেখাবে। ১৫০–২৫০ word লেখার জায়গা।</p>
+                    <textarea
+                      value={draft.page_intro}
+                      onChange={(event) => updateDraft("page_intro", event.target.value)}
+                      placeholder={`RIZZ ${draft.name || "category"} are handcrafted in our Chittagong workshop using genuine full-grain leather...`}
+                      rows={6}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 resize-y"
+                    />
+                  </div>
+
+                  {/* Extra FAQ */}
+                  <div className="grid gap-3">
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Extra FAQs</span>
+                      <p className="mt-0.5 text-xs text-slate-400">Category-specific Q&A — existing FAQ-এর সাথে যুক্ত হবে।</p>
+                    </div>
+                    {draft.extra_faq.map((item, i) => (
+                      <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-500">FAQ {i + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateDraft("extra_faq", draft.extra_faq.filter((_, idx) => idx !== i))}
+                            className="text-xs text-rose-500 hover:text-rose-700"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <input
+                          value={item.q}
+                          onChange={(e) => {
+                            const updated = [...draft.extra_faq];
+                            updated[i] = { ...updated[i], q: e.target.value };
+                            updateDraft("extra_faq", updated);
+                          }}
+                          placeholder="Question"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                        />
+                        <textarea
+                          value={item.a}
+                          onChange={(e) => {
+                            const updated = [...draft.extra_faq];
+                            updated[i] = { ...updated[i], a: e.target.value };
+                            updateDraft("extra_faq", updated);
+                          }}
+                          placeholder="Answer"
+                          rows={2}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 resize-none"
+                        />
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => updateDraft("extra_faq", [...draft.extra_faq, { q: "", a: "" }])}
+                      className="text-sm text-teal-600 hover:text-teal-700 font-medium text-left"
+                    >
+                      + Add FAQ
+                    </button>
+                  </div>
 
                   <label className="grid gap-2">
                     <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Order</span>

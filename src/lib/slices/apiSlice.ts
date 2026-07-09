@@ -50,6 +50,8 @@ export interface CategoryRecord {
   banner_image?: string;
   seo_title?: string;
   seo_description?: string;
+  page_intro?: string;
+  extra_faq?: { q: string; a: string }[];
   order?: number;
   created_at?: string;
   updated_at?: string;
@@ -67,6 +69,8 @@ export interface CreateCategoryPayload {
   banner_image?: string;
   seo_title?: string;
   seo_description?: string;
+  page_intro?: string;
+  extra_faq?: { q: string; a: string }[];
   order?: number;
 }
 
