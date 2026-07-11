@@ -24,6 +24,7 @@ const NAV = [
   {
     section: "Content",
     items: [
+      { label: "Blog Posts", href: "/posts", icon: "✎" },
       { label: "Homepage", href: "/homepage", icon: "⬡" },
       { label: "About", href: "/about", icon: "◎" },
       { label: "Policies", href: "/policies", icon: "◉" },

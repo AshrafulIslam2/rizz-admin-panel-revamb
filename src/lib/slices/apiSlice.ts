@@ -102,6 +102,35 @@ interface PagePayload {
   order: number;
 }
 
+export interface BlogPostRecord {
+  id: string;
+  title: string;
+  slug: string;
+  description?: string;
+  category: string;
+  reading_time: number;
+  cover_image?: string;
+  cover_alt?: string;
+  body: any[];
+  is_published: boolean;
+  published_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBlogPostPayload {
+  title: string;
+  slug: string;
+  description?: string;
+  category?: string;
+  reading_time?: number;
+  cover_image?: string;
+  cover_alt?: string;
+  body?: any[];
+  is_published?: boolean;
+  published_at?: string;
+}
+
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
@@ -115,7 +144,7 @@ export const apiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Pages', 'Page', 'Hero', 'Faqs', 'Categories'],
+  tagTypes: ['Pages', 'Page', 'Hero', 'Faqs', 'Categories', 'BlogPosts'],
   endpoints: (builder) => ({
     getCategories: builder.query<CategoryRecord[], void>({
       query: () => '/categories',
@@ -293,6 +322,39 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Faqs', ]
     }),
+
+    // Blog Posts
+    getBlogPosts: builder.query<BlogPostRecord[], void>({
+      query: () => '/blog-posts',
+      providesTags: ['BlogPosts'],
+    }),
+    getBlogPost: builder.query<BlogPostRecord, string>({
+      query: (slug) => `/blog-posts/${slug}`,
+      providesTags: ['BlogPosts'],
+    }),
+    createBlogPost: builder.mutation<BlogPostRecord, CreateBlogPostPayload>({
+      query: (payload) => ({
+        url: '/blog-posts',
+        method: 'POST',
+        body: payload,
+      }),
+      invalidatesTags: ['BlogPosts'],
+    }),
+    updateBlogPost: builder.mutation<BlogPostRecord, { id: string; data: CreateBlogPostPayload }>({
+      query: ({ id, data }) => ({
+        url: `/blog-posts/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['BlogPosts'],
+    }),
+    deleteBlogPost: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/blog-posts/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['BlogPosts'],
+    }),
   }),
 });
 
@@ -319,5 +381,10 @@ export const {
   useReplacePageFaqMutation,
   usePatchPageFaqMutation,
   useDeletePageFaqMutation,
+  useGetBlogPostsQuery,
+  useGetBlogPostQuery,
+  useCreateBlogPostMutation,
+  useUpdateBlogPostMutation,
+  useDeleteBlogPostMutation,
 } = apiSlice;
 
