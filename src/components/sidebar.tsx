@@ -10,6 +10,12 @@ const NAV = [
     icon: "⊞",
   },
   {
+    section: "Analytics",
+    items: [
+      { label: "Statistics", href: "/statistics", icon: "▲" },
+    ],
+  },
+  {
     section: "Commerce",
     items: [
       { label: "Orders", href: "/orders", icon: "◫" },
@@ -19,6 +25,19 @@ const NAV = [
       { label: "Categories", href: "/categories", icon: "◈" },
       { label: "Reviews", href: "/reviews", icon: "◇" },
       { label: "Campaigns", href: "/campaigns", icon: "◆" },
+    ],
+  },
+  {
+    section: "Retail & POS",
+    items: [
+      { label: "POS Terminal", href: "/pos", icon: "⊟" },
+      { label: "Inventory", href: "/inventory", icon: "⊞" },
+      { label: "Suppliers", href: "/suppliers", icon: "◩" },
+      { label: "Purchase Orders", href: "/purchases", icon: "◪" },
+      { label: "Returns & Exchange", href: "/returns", icon: "↩" },
+      { label: "Customers CRM", href: "/customers-crm", icon: "◎" },
+      { label: "Barcodes", href: "/barcodes", icon: "⊟" },
+      { label: "Price Tags", href: "/price-tags", icon: "◈" },
     ],
   },
   {

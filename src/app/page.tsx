@@ -32,9 +32,10 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [ordersRes, productsRes] = await Promise.allSettled([
+        const [ordersRes, productsRes, profitRes] = await Promise.allSettled([
           fetch(`${API}/orders?limit=5&sort=createdAt:desc`, { cache: "no-store" }),
           fetch(`${API}/products?limit=1`, { cache: "no-store" }),
+          fetch(`${API}/orders/stats/profit`, { cache: "no-store" }),
         ]);
 
         let orders: any[] = [];
@@ -56,12 +57,24 @@ export default function DashboardPage() {
           productCount = data.total ?? (Array.isArray(data) ? data.length : 0);
         }
 
+        let totalProfit: number | null = null;
+        if (profitRes.status === "fulfilled" && profitRes.value.ok) {
+          const data = await profitRes.value.json();
+          totalProfit = data.totalProfit ?? null;
+        }
+
         setRecentOrders(orders);
         setStats([
           { label: "Total Orders", value: String(totalOrders), sub: "all time", color: "text-slate-900" },
           { label: "Pending COD", value: String(pendingOrders), sub: "need confirmation", color: "text-amber-600" },
           { label: "Products", value: String(productCount), sub: "in catalog", color: "text-slate-900" },
           { label: "Revenue", value: `৳${revenue.toLocaleString()}`, sub: "delivered orders", color: "text-emerald-700" },
+          {
+            label: "Total Profit",
+            value: totalProfit != null ? `৳${Math.round(totalProfit).toLocaleString()}` : "—",
+            sub: totalProfit != null ? "delivered orders (after production cost)" : "Set production cost on variants",
+            color: totalProfit != null && totalProfit >= 0 ? "text-emerald-700" : "text-rose-600",
+          },
         ]);
       } catch {
         setStats([
@@ -89,9 +102,9 @@ export default function DashboardPage() {
         </header>
 
         {/* Stats */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {loading
-            ? Array.from({ length: 4 }).map((_, i) => (
+            ? Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-24 animate-pulse rounded-2xl bg-white border border-slate-200" />
               ))
             : stats.map((s) => (

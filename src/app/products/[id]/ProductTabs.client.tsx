@@ -448,13 +448,13 @@ function CategoryTab({ productId, initial }: { productId: string; initial: Recor
 
 // ─── Variants ────────────────────────────────────────────────────────────────
 
-type Variant = { id?: string; size: string; color: string; price: string; salePrice?: string; stock: string };
+type Variant = { id?: string; size: string; color: string; price: string; salePrice?: string; productionPrice?: string; stock: string };
 
-type VariantEdit = { size: string; color: string; price: string; sale_price: string; stock_qty: string };
+type VariantEdit = { size: string; color: string; price: string; sale_price: string; production_price: string; stock_qty: string };
 
 function VariantsTab({ productId }: { productId: string }) {
   const [variants, setVariants] = useState<any[]>([]);
-  const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", salePrice: "", stock: "0" });
+  const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
   const [edits, setEdits] = useState<Record<string, VariantEdit>>({});
   const [savingRow, setSavingRow] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -466,6 +466,7 @@ function VariantsTab({ productId }: { productId: string }) {
       color: String(v.attributes?.color ?? v.color ?? ""),
       price: String(v.price ?? ""),
       sale_price: String(v.sale_price ?? ""),
+      production_price: String(v.production_price ?? ""),
       stock_qty: String(v.stock_qty ?? v.stock ?? 0),
     };
   }
@@ -493,6 +494,7 @@ function VariantsTab({ productId }: { productId: string }) {
         variant_name: variantName,
         price: Number(draft.price),
         sale_price: draft.salePrice ? Number(draft.salePrice) : null,
+        production_price: draft.productionPrice ? Number(draft.productionPrice) : null,
         stock_qty: Number(draft.stock),
         attributes: { size: draft.size, color: draft.color },
         is_default: false,
@@ -501,7 +503,7 @@ function VariantsTab({ productId }: { productId: string }) {
       setVariants((v) => [...v, created]);
       setEdits((e) => ({ ...e, [created.id]: { price: String(created.price ?? ""), sale_price: String(created.sale_price ?? "") } }));
       setMsg({ text: "Variant added.", ok: true });
-      setDraft({ size: "41", color: "Tan", price: "", salePrice: "", stock: "0" });
+      setDraft({ size: "41", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
     } catch {
       setMsg({ text: "Failed. Check API.", ok: false });
     } finally { setSaving(false); }
@@ -515,6 +517,7 @@ function VariantsTab({ productId }: { productId: string }) {
       const updated = await api(`/products/${productId}/variants/${id}`, "PATCH", {
         price: Number(e.price),
         sale_price: e.sale_price ? Number(e.sale_price) : null,
+        production_price: e.production_price ? Number(e.production_price) : null,
         stock_qty: Number(e.stock_qty),
         attributes: { size: e.size, color: e.color },
         variant_name: `${e.size} / ${e.color}`,
@@ -546,7 +549,7 @@ function VariantsTab({ productId }: { productId: string }) {
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{["Size", "Color", "Price (৳)", "Sale Price (৳)", "Stock", ""].map((h) => (
+              <tr>{["Size", "Color", "Price (৳)", "Sale Price (৳)", "Production Cost (৳)", "Stock", ""].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
               ))}</tr>
             </thead>
@@ -596,6 +599,16 @@ function VariantsTab({ productId }: { productId: string }) {
                     <td className="px-4 py-2.5">
                       <input
                         type="number"
+                        placeholder="—"
+                        value={rowEdit.production_price}
+                        onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, production_price: e.target.value } }))}
+                        className="w-24 rounded-lg border border-amber-200 px-2 py-1 text-sm outline-none focus:border-amber-400"
+                        title="Production / manufacturing cost — used for profit calculation"
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="number"
                         value={rowEdit.stock_qty}
                         onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, stock_qty: e.target.value } }))}
                         className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
@@ -638,6 +651,11 @@ function VariantsTab({ productId }: { productId: string }) {
           <div>
             <p className={lbl}>Sale Price (BDT, optional)</p>
             <input type="number" value={draft.salePrice} onChange={(e) => setDraft((d) => ({ ...d, salePrice: e.target.value }))} placeholder="3999" className={field} />
+          </div>
+          <div>
+            <p className={lbl}>Production Cost (BDT, optional)</p>
+            <input type="number" value={draft.productionPrice} onChange={(e) => setDraft((d) => ({ ...d, productionPrice: e.target.value }))} placeholder="1800" className={field + " border-amber-200 focus:border-amber-400"} />
+            <p className="mt-1 text-[11px] text-slate-400">Manufacturing cost — used to calculate profit on dashboard.</p>
           </div>
           <div>
             <p className={lbl}>Stock Qty</p>
