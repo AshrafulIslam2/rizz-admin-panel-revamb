@@ -26,8 +26,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push("/");
-      router.refresh();
+      window.location.href = "/";
     } catch {
       setError("Could not reach the server. Try again.");
       setLoading(false);
