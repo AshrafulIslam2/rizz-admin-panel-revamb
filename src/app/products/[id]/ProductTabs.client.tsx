@@ -146,7 +146,7 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-const SIZES = ["40", "41", "42", "43", "44"];
+const SIZES = ["39", "40", "41", "42", "43", "44", "45"];
 const COLORS = ["Tan", "Brown", "Black", "Dark Brown", "Cognac", "Oxblood"];
 
 async function api(path: string, method = "GET", body?: unknown) {
@@ -454,7 +454,7 @@ type VariantEdit = { size: string; color: string; price: string; sale_price: str
 
 function VariantsTab({ productId }: { productId: string }) {
   const [variants, setVariants] = useState<any[]>([]);
-  const [draft, setDraft] = useState<Variant>({ size: "41", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
+  const [draft, setDraft] = useState<Variant>({ size: "39", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
   const [edits, setEdits] = useState<Record<string, VariantEdit>>({});
   const [savingRow, setSavingRow] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -501,9 +501,9 @@ function VariantsTab({ productId }: { productId: string }) {
         status: "ACTIVE",
       });
       setVariants((v) => [...v, created]);
-      setEdits((e) => ({ ...e, [created.id]: { price: String(created.price ?? ""), sale_price: String(created.sale_price ?? "") } }));
+      setEdits((e) => ({ ...e, [created.id]: toEdit(created) }));
       setMsg({ text: "Variant added.", ok: true });
-      setDraft({ size: "41", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
+      setDraft({ size: "39", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
     } catch {
       setMsg({ text: "Failed. Check API.", ok: false });
     } finally { setSaving(false); }
