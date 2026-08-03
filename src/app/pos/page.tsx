@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
@@ -39,9 +40,9 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
       {/* Print-only styles */}
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #receipt-print-root { display: block !important; }
-          #receipt-print-root { position: fixed; top: 0; left: 0; width: 80mm; }
+          * { visibility: hidden !important; }
+          #receipt-print-root, #receipt-print-root * { visibility: visible !important; }
+          #receipt-print-root { position: fixed !important; top: 0 !important; left: 0 !important; width: 80mm !important; background: white !important; }
         }
         @media screen {
           #receipt-print-root { max-width: 340px; }
@@ -168,6 +169,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
 }
 
 export default function PosPage() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -181,11 +183,13 @@ export default function PosPage() {
   const [history, setHistory] = useState<any[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetch(`${API}/products?limit=200`).then((r) => r.json()).then((d) => {
+  function loadProducts() {
+    return fetch(`${API}/products?limit=200`).then((r) => r.json()).then((d) => {
       setProducts(Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : []);
     });
-  }, []);
+  }
+
+  useEffect(() => { loadProducts(); }, []);
 
   useEffect(() => {
     if (tab === "history") {
@@ -199,10 +203,24 @@ export default function PosPage() {
     p.variants.some((v) => v.sku?.toLowerCase().includes(search.toLowerCase()) || v.barcode?.includes(search))
   ).slice(0, 8);
 
+  function getVariantStock(variantId: string): number {
+    for (const p of products) {
+      const v = p.variants.find((v) => v.id === variantId);
+      if (v) return v.stock_qty;
+    }
+    return 0;
+  }
+
   function addToCart(p: Product, v: Variant) {
+    if (v.stock_qty <= 0) return; // out of stock, don't add
     const existing = cart.findIndex((c) => c.variant_id === v.id);
     if (existing >= 0) {
-      setCart(cart.map((c, i) => i === existing ? { ...c, qty: c.qty + 1 } : c));
+      const newQty = cart[existing].qty + 1;
+      if (newQty > v.stock_qty) {
+        alert(`Only ${v.stock_qty} in stock for ${p.name}${v.attributes?.color ? ` (${v.attributes.color})` : ""}`);
+        return;
+      }
+      setCart(cart.map((c, i) => i === existing ? { ...c, qty: newQty } : c));
     } else {
       setCart([...cart, { variant_id: v.id, name: p.name, color: v.attributes?.color || "", size: v.attributes?.size || "", price: v.price, qty: 1, sku: v.sku }]);
     }
@@ -212,6 +230,11 @@ export default function PosPage() {
 
   function updateQty(i: number, qty: number) {
     if (qty <= 0) { setCart(cart.filter((_, idx) => idx !== i)); return; }
+    const stock = getVariantStock(cart[i].variant_id);
+    if (qty > stock) {
+      alert(`Only ${stock} in stock for ${cart[i].name}`);
+      return;
+    }
     setCart(cart.map((c, idx) => idx === i ? { ...c, qty } : c));
   }
 
@@ -223,6 +246,16 @@ export default function PosPage() {
 
   async function handleCheckout(status: "completed" | "draft") {
     if (cart.length === 0) return;
+    // Frontend stock validation before sending to server
+    if (status === "completed") {
+      for (const item of cart) {
+        const stock = getVariantStock(item.variant_id);
+        if (item.qty > stock) {
+          alert(`Insufficient stock! "${item.name}" has only ${stock} left but you're trying to sell ${item.qty}.`);
+          return;
+        }
+      }
+    }
     setSaving(true);
     const res = await fetch(`${API}/pos`, {
       method: "POST",
@@ -252,6 +285,8 @@ export default function PosPage() {
         setDiscount({ type: "flat", amount: 0 });
         setPayment({ cash: 0, card: 0, mobile: 0 });
         setNote("");
+        router.refresh();
+        loadProducts(); // re-fetch stock so next sale shows updated quantities
       } else {
         alert("Draft saved: " + data.tx_number);
       }

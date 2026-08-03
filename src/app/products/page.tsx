@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import AutoRefresh from '@/components/auto-refresh'
 
 type Product = {
   id: string | number
@@ -61,6 +62,7 @@ export default async function ProductsPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-10">
+      <AutoRefresh intervalMs={15000} />
       <div className="rounded-2xl bg-white/80 backdrop-blur border border-white/60 shadow-lg p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>

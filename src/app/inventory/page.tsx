@@ -58,7 +58,11 @@ export default function InventoryPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleMove(e: React.FormEvent) {
     e.preventDefault();
@@ -82,7 +86,18 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Inventory Management</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Inventory Management</h1>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live · auto-refreshes every 15s
+          </span>
+          <button onClick={load} className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs text-white hover:bg-slate-600 transition">
+            ↺ Refresh now
+          </button>
+        </div>
+      </div>
 
       {summary && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
