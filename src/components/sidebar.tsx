@@ -31,8 +31,7 @@ const NAV = [
       { label: "Purchase Orders", href: "/purchases", icon: "◪" },
       { label: "Returns & Exchange", href: "/returns", icon: "↩" },
       { label: "Customers CRM", href: "/customers-crm", icon: "◎" },
-      { label: "Barcodes", href: "/barcodes", icon: "⊟" },
-      { label: "Price Tags", href: "/price-tags", icon: "◈" },
+      { label: "Barcodes & Price Tags", href: "/barcodes", icon: "🏷" },
     ],
   },
   {

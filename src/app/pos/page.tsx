@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
+  printReceipt, type ReceiptData,
+} from "@/lib/printer";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
@@ -20,6 +24,79 @@ function RizzLogo() {
       <line x1="40" y1="80" x2="52" y2="65" stroke="white" strokeWidth="6" strokeLinecap="round" />
       <line x1="50" y1="80" x2="62" y2="65" stroke="white" strokeWidth="6" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function EscPosButton({ receipt }: { receipt: any }) {
+  const [connected, setConnected] = useState(isPrinterConnected());
+  const [printing, setPrinting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const supported = isPrinterSupported();
+
+  if (!supported) return null;
+
+  async function connect() {
+    try {
+      await connectPrinter();
+      setConnected(true);
+      setStatus("✅ Connected");
+    } catch (e: any) {
+      setStatus(`❌ ${e.message ?? "Failed"}`);
+    }
+  }
+
+  async function handlePrint() {
+    if (!connected) { await connect(); return; }
+    setPrinting(true); setStatus(null);
+    try {
+      const subtotal = receipt.subtotal ?? 0;
+      const itemDiscount = receipt.discount_amount ?? 0;
+      const netPayable = receipt.total ?? (subtotal - itemDiscount);
+      const paid = (receipt.payment_cash ?? 0) + (receipt.payment_card ?? 0) + (receipt.payment_mobile ?? 0);
+      const date = new Date(receipt.created_at);
+      const dateStr = `${date.getDate().toString().padStart(2,"0")}.${(date.getMonth()+1).toString().padStart(2,"0")}.${date.getFullYear()} ${date.getHours().toString().padStart(2,"0")}:${date.getMinutes().toString().padStart(2,"0")}`;
+
+      const data: ReceiptData = {
+        shop_name: "RIZZ LEATHER",
+        shop_address: "Shop-345, 3F Afmi Plaza, Chattagram",
+        shop_phone: "01627472686",
+        invoice_no: receipt.tx_number,
+        date: dateStr,
+        cashier: receipt.cashier_name,
+        items: (receipt.items ?? []).map((it: any) => ({
+          name: `${it.name}${it.size ? ` (${it.size}/${it.color})` : ""}`,
+          qty: it.qty,
+          price: it.price,
+          total: it.price * it.qty,
+        })),
+        item_total: subtotal,
+        item_discount: itemDiscount || undefined,
+        subtotal: subtotal - itemDiscount,
+        net_payable: netPayable,
+        paid,
+        change: Math.max(0, paid - netPayable),
+        payment_cash: receipt.payment_cash,
+        payment_card: receipt.payment_card,
+        payment_mobile: receipt.payment_mobile,
+      };
+      await printReceipt(data);
+      setStatus("✅ Printed via ESC/POS");
+    } catch (e: any) {
+      setStatus(`❌ ${e.message}`);
+    } finally { setPrinting(false); }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        onClick={handlePrint}
+        disabled={printing}
+        className="flex-1 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
+      >
+        {printing ? "Printing…" : connected ? "🖨 ESC/POS Print" : "🔌 Connect & Print"}
+      </button>
+      {status && <p className="text-[11px] text-center text-slate-500">{status}</p>}
+    </div>
   );
 }
 
@@ -155,8 +232,9 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
           onClick={() => window.print()}
           className="flex-1 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-500"
         >
-          🖨 Print Receipt
+          🖨 Browser Print
         </button>
+        <EscPosButton receipt={receipt} />
         <button
           onClick={onClose}
           className="flex-1 rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-600"

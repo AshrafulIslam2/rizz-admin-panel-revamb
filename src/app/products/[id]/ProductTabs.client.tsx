@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
+  printLabel, calibratePrinter, feedLabels, LABEL_PRESETS,
+  type LabelData,
+} from "@/lib/printer";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
@@ -452,7 +457,160 @@ type Variant = { id?: string; size: string; color: string; price: string; salePr
 
 type VariantEdit = { size: string; color: string; price: string; sale_price: string; production_price: string; stock_qty: string };
 
-function VariantsTab({ productId }: { productId: string }) {
+// ─── Printer Panel ───────────────────────────────────────────────────────────
+
+type LabelPresetKey = keyof typeof LABEL_PRESETS;
+
+function PrinterPanel({ variants, productName }: { variants: any[]; productName?: string }) {
+  const supported = isPrinterSupported();
+  const [connected, setConnected] = useState(false);
+  const [preset, setPreset] = useState<LabelPresetKey>("medium");
+  const [qty, setQty] = useState(1);
+  const [showQr, setShowQr] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [printing, setPrinting] = useState<string | null>(null);
+
+  useEffect(() => {
+    setConnected(isPrinterConnected());
+  }, []);
+
+  async function connect() {
+    try {
+      await connectPrinter();
+      setConnected(true);
+      setStatus("✅ Printer connected");
+    } catch (e: any) {
+      setStatus(`❌ ${e.message ?? "Connection failed"}`);
+    }
+  }
+
+  async function disconnect() {
+    await disconnectPrinter();
+    setConnected(false);
+    setStatus("Disconnected");
+  }
+
+  async function calibrate() {
+    try {
+      await calibratePrinter();
+      setStatus("✅ Calibration started — printer will feed and align.");
+    } catch (e: any) {
+      setStatus(`❌ ${e.message}`);
+    }
+  }
+
+  async function handlePrintLabel(v: any) {
+    setPrinting(v.id); setStatus(null);
+    const { width_mm, height_mm } = LABEL_PRESETS[preset];
+    const labelData: LabelData = {
+      width_mm, height_mm,
+      product_name: productName ?? "RIZZ",
+      variant_name: `${v.attributes?.size ?? v.size ?? ""} / ${v.attributes?.color ?? v.color ?? ""}`,
+      price: v.price,
+      sale_price: v.sale_price ?? undefined,
+      sku: v.sku,
+      barcode: v.barcode ?? v.sku,
+      show_qr: showQr,
+      qty,
+    };
+    try {
+      await printLabel(labelData);
+      setStatus(`✅ Printed ${qty}× label for ${labelData.variant_name}`);
+    } catch (e: any) {
+      setStatus(`❌ ${e.message}`);
+    } finally { setPrinting(null); }
+  }
+
+  if (!supported) return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+      ⚠️ WebUSB is not supported in this browser. Use <strong>Chrome or Edge</strong> to print labels directly.
+    </div>
+  );
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+      {/* Header row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm font-semibold text-slate-700">🖨 Label Printer (Rongta RP80VI)</p>
+        <div className="flex gap-2 ml-auto">
+          {!connected ? (
+            <button onClick={connect} className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700">
+              Connect Printer
+            </button>
+          ) : (
+            <>
+              <span className="rounded-lg bg-teal-100 px-3 py-1.5 text-xs font-semibold text-teal-800">● Connected</span>
+              <button onClick={calibrate} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-slate-100">Calibrate</button>
+              <button onClick={disconnect} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100">Disconnect</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Settings */}
+      <div className="flex flex-wrap gap-4 items-end">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Label Size</p>
+          <select value={preset} onChange={(e) => setPreset(e.target.value as LabelPresetKey)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-400">
+            {(Object.entries(LABEL_PRESETS) as [LabelPresetKey, typeof LABEL_PRESETS[LabelPresetKey]][]).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Copies</p>
+          <input type="number" min={1} max={100} value={qty} onChange={(e) => setQty(Number(e.target.value))}
+            className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-400" />
+        </div>
+        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" checked={showQr} onChange={(e) => setShowQr(e.target.checked)} className="h-3.5 w-3.5" />
+          Add QR code
+        </label>
+      </div>
+
+      {/* Status */}
+      {status && (
+        <p className={`text-xs rounded-lg px-3 py-2 ${status.startsWith("❌") ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-teal-50 text-teal-800 border border-teal-200"}`}>
+          {status}
+        </p>
+      )}
+
+      {/* Per-variant print buttons */}
+      {variants.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-slate-400">Click a variant to print its label:</p>
+          <div className="flex flex-wrap gap-2">
+            {variants.map((v) => {
+              const size  = v.attributes?.size  ?? v.size  ?? "?";
+              const color = v.attributes?.color ?? v.color ?? "?";
+              const id = v.id ?? v.sku ?? `${size}-${color}`;
+              return (
+                <button
+                  key={id}
+                  disabled={!connected || printing === v.id}
+                  onClick={() => handlePrintLabel(v)}
+                  title={`Tk ${v.price}${v.sku ? ` · SKU ${v.sku}` : ""}`}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-teal-50 hover:border-teal-300 disabled:opacity-40 transition"
+                >
+                  {printing === v.id ? "Printing…" : `🏷 ${size} / ${color}`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <p className="text-[10px] text-slate-400">
+        Mode: TSPL · Gap label · CODE128 barcode · Chrome/Edge only
+        {" · "}Gap stock use করলে সেটিং ডিফল্টই ঠিক আছে। Black-mark stock হলে dev-এ জানাও।
+      </p>
+    </div>
+  );
+}
+
+// ─── Variants Tab ─────────────────────────────────────────────────────────────
+
+function VariantsTab({ productId, productName }: { productId: string; productName?: string }) {
   const [variants, setVariants] = useState<any[]>([]);
   const [draft, setDraft] = useState<Variant>({ size: "39", color: "Tan", price: "", salePrice: "", productionPrice: "", stock: "0" });
   const [edits, setEdits] = useState<Record<string, VariantEdit>>({});
@@ -541,6 +699,7 @@ function VariantsTab({ productId }: { productId: string }) {
   return (
     <div className="space-y-5">
       {msg && <Msg text={msg.text} ok={msg.ok} />}
+      <PrinterPanel variants={variants} productName={productName} />
       <p className="text-xs text-slate-400">
         The storefront always shows the <strong>lowest price across these variants</strong> on product cards. Set a
         Sale Price on any variant to discount it — the card and product page automatically reflect whichever variant is cheapest.
@@ -1674,7 +1833,7 @@ export default function ProductTabs({
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         {activeTab === "basic"        && <BasicTab       productId={productId} initial={initialData} aiData={aiData} />}
         {activeTab === "category"     && <CategoryTab    productId={productId} initial={initialData} />}
-        {activeTab === "variants"     && <VariantsTab    productId={productId} />}
+        {activeTab === "variants"     && <VariantsTab    productId={productId} productName={initialData.name as string | undefined} />}
         {activeTab === "price"        && <PriceTab       productId={productId} initial={initialData} />}
         {activeTab === "tags"         && <TagsTab        productId={productId} initial={initialData} aiData={aiData} />}
         {activeTab === "seo"          && <SeoTab         productId={productId} initial={initialData} aiData={aiData} />}
