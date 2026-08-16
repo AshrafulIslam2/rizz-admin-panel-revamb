@@ -9,9 +9,9 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
-type Variant = { id: string; sku?: string; barcode?: string; price: number; stock_qty: number; attributes: any };
+type Variant = { id: string; sku?: string; barcode?: string; price: number; sale_price?: number | null; stock_qty: number; attributes: any };
 type Product = { id: string; name: string; slug: string; variants: Variant[] };
-type CartItem = { variant_id: string; name: string; color: string; size: string; price: number; qty: number; sku?: string };
+type CartItem = { variant_id: string; name: string; color: string; size: string; price: number; original_price: number; qty: number; sku?: string };
 
 // Thermal receipt RIZZ logo (SVG inline, matches the black+white R brand mark)
 function RizzLogo() {
@@ -300,7 +300,8 @@ export default function PosPage() {
       }
       setCart(cart.map((c, i) => i === existing ? { ...c, qty: newQty } : c));
     } else {
-      setCart([...cart, { variant_id: v.id, name: p.name, color: v.attributes?.color || "", size: v.attributes?.size || "", price: v.price, qty: 1, sku: v.sku }]);
+      const effectivePrice = (v.sale_price && v.sale_price > 0 && v.sale_price < v.price) ? v.sale_price : v.price;
+      setCart([...cart, { variant_id: v.id, name: p.name, color: v.attributes?.color || "", size: v.attributes?.size || "", price: effectivePrice, original_price: v.price, qty: 1, sku: v.sku }]);
     }
     setSearch("");
     searchRef.current?.focus();
@@ -316,6 +317,8 @@ export default function PosPage() {
     setCart(cart.map((c, idx) => idx === i ? { ...c, qty } : c));
   }
 
+  const originalTotal = cart.reduce((s, c) => s + c.original_price * c.qty, 0);
+  const saleDiscount = cart.reduce((s, c) => s + (c.original_price - c.price) * c.qty, 0);
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
   const discountAmt = discount.type === "percent" ? Math.round(subtotal * discount.amount / 100) : Number(discount.amount);
   const total = Math.max(0, subtotal - discountAmt);
@@ -341,8 +344,9 @@ export default function PosPage() {
       body: JSON.stringify({
         customer_name: customer.name || null,
         customer_phone: customer.phone || null,
-        items: cart.map((c) => ({ variant_id: c.variant_id, name: c.name, color: c.color, size: c.size, price: c.price, qty: c.qty })),
+        items: cart.map((c) => ({ variant_id: c.variant_id, name: c.name, color: c.color, size: c.size, price: c.price, original_price: c.original_price, qty: c.qty })),
         subtotal,
+        sale_discount: saleDiscount,
         discount_amount: discountAmt,
         discount_type: discount.type,
         total,
@@ -437,7 +441,14 @@ export default function PosPage() {
                           <p className="text-xs text-slate-400">{v.attributes?.color} · {v.attributes?.size}{v.sku ? ` · ${v.sku}` : ""}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-medium text-white">৳{v.price}</p>
+                          {v.sale_price && v.sale_price > 0 && v.sale_price < v.price ? (
+                            <div>
+                              <p className="text-sm font-medium text-teal-400">৳{v.sale_price}</p>
+                              <p className="text-xs text-slate-500 line-through">৳{v.price}</p>
+                            </div>
+                          ) : (
+                            <p className="text-sm font-medium text-white">৳{v.price}</p>
+                          )}
                           <p className={`text-xs ${v.stock_qty > 0 ? "text-emerald-400" : "text-rose-400"}`}>{v.stock_qty > 0 ? `${v.stock_qty} in stock` : "Out of stock"}</p>
                         </div>
                       </button>
@@ -464,7 +475,16 @@ export default function PosPage() {
                         <p className="text-white">{item.name}</p>
                         <p className="text-xs text-slate-400">{item.color} · {item.size}</p>
                       </td>
-                      <td className="px-4 py-2 text-slate-300">৳{item.price}</td>
+                      <td className="px-4 py-2">
+                        {item.original_price > item.price ? (
+                          <div>
+                            <p className="text-teal-400 font-medium">৳{item.price}</p>
+                            <p className="text-xs text-slate-500 line-through">৳{item.original_price}</p>
+                          </div>
+                        ) : (
+                          <p className="text-slate-300">৳{item.price}</p>
+                        )}
+                      </td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1">
                           <button onClick={() => updateQty(i, item.qty - 1)} className="w-6 h-6 rounded bg-slate-700 text-white text-xs hover:bg-slate-600">-</button>
@@ -521,10 +541,10 @@ export default function PosPage() {
 
             {/* Summary */}
             <div className="rounded-xl border border-white/10 bg-slate-800/50 p-4 space-y-1.5 text-sm">
-              <div className="flex justify-between text-slate-400"><span>Item Total</span><span>৳{subtotal.toLocaleString()}</span></div>
-              <div className="flex justify-between text-slate-400"><span>Item Discount</span><span>-৳{discountAmt.toLocaleString()}</span></div>
-              <div className="flex justify-between text-slate-400"><span>Other Discount</span><span>৳0</span></div>
-              <div className="flex justify-between text-slate-400"><span>Special Discount</span><span>৳0</span></div>
+              <div className="flex justify-between text-slate-400"><span>Item Total (MRP)</span><span>৳{originalTotal.toLocaleString()}</span></div>
+              {saleDiscount > 0 && <div className="flex justify-between text-teal-400"><span>Sale Discount</span><span>-৳{saleDiscount.toLocaleString()}</span></div>}
+              <div className="flex justify-between text-slate-400"><span>After Sale Price</span><span>৳{subtotal.toLocaleString()}</span></div>
+              {discountAmt > 0 && <div className="flex justify-between text-slate-400"><span>Extra Discount</span><span>-৳{discountAmt.toLocaleString()}</span></div>}
               <div className="flex justify-between text-slate-300 font-medium border-t border-white/10 pt-1.5"><span>Sub Total</span><span>৳{(subtotal - discountAmt).toLocaleString()}</span></div>
               <div className="flex justify-between text-white font-bold text-base"><span>Net Payable</span><span>৳{total.toLocaleString()}</span></div>
               <div className="flex justify-between text-slate-400"><span>Paid</span><span>৳{totalPaid.toLocaleString()}</span></div>
