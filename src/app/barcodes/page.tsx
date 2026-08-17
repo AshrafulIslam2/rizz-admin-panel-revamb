@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
-  printLabel, calibratePrinter, LABEL_PRESETS,
+  printLabel, calibratePrinter, testPrint, testPrintEscPos, LABEL_PRESETS,
   type LabelData,
 } from "@/lib/printer";
 
@@ -31,8 +31,8 @@ function BarcodeCanvas({ code, show }: { code: string; show: boolean }) {
     import("jsbarcode").then(({ default: JsBarcode }) => {
       try {
         JsBarcode(ref.current!, code, {
-          format: "CODE128", width: 1.5, height: 38,
-          displayValue: true, fontSize: 10, margin: 4,
+          format: "CODE128", width: 2.5, height: 50,
+          displayValue: true, fontSize: 14, margin: 4,
         });
         setDone(true);
       } catch {}
@@ -42,6 +42,7 @@ function BarcodeCanvas({ code, show }: { code: string; show: boolean }) {
   return (
     <canvas
       ref={ref}
+      data-barcode-canvas={code}
       className="w-full mt-2 rounded"
       style={{ display: show ? "block" : "none" }}
     />
@@ -137,7 +138,7 @@ export default function BarcodesPage() {
   const [printing, setPrinting] = useState(false);
 
   // Label settings
-  const [preset, setPreset] = useState<LabelPresetKey>("medium");
+  const [preset, setPreset] = useState<LabelPresetKey>("standard");
   const [showQr, setShowQr] = useState(false);
 
   // Load all variants
@@ -189,63 +190,65 @@ export default function BarcodesPage() {
   // ── Browser print ─────────────────────────────────────────────────────────
   function browserPrint() {
     const pw = window.open("", "_blank");
-    if (!pw) return;
+    if (!pw) { alert("Popup blocked! Allow popups for this site."); return; }
 
-    // Wait for barcodes to render then open print
+    // Grab already-rendered barcode canvas images as data URLs (no CDN needed)
+    const canvasMap: Record<string, string> = {};
+    document.querySelectorAll<HTMLCanvasElement>("canvas[data-barcode-canvas]").forEach((c) => {
+      const code = c.getAttribute("data-barcode-canvas");
+      if (code && c.width > 0) canvasMap[code] = c.toDataURL("image/png");
+    });
+
+    const { width_mm, height_mm } = LABEL_PRESETS[preset];
+
     const rows = selectedList.map((v) => {
-      const code = v.barcode || v.sku || v.id.slice(-8);
-      const qty  = qtys[v.id] ?? 1;
+      const code     = v.barcode || v.sku || v.id.slice(-8);
+      const qty      = qtys[v.id] ?? 1;
+      const imgSrc   = canvasMap[code] ?? "";
       const priceStr = v.sale_price
-        ? `৳${v.sale_price.toLocaleString()} <s style="font-size:8px;color:#999">৳${v.price.toLocaleString()}</s>`
+        ? `৳${v.sale_price.toLocaleString()} <s style="font-size:13px;color:#777">৳${v.price.toLocaleString()}</s>`
         : `৳${v.price.toLocaleString()}`;
 
-      // Repeat label `qty` times
       return Array.from({ length: qty }, () => `
         <div class="label">
           <p class="name">${v.product?.name ?? ""}</p>
           <p class="variant">${v.attributes?.size ?? ""} / ${v.attributes?.color ?? ""}</p>
-          <svg class="bc" data-code="${code}"></svg>
+          ${imgSrc ? `<img src="${imgSrc}" class="bc" />` : `<p style="font-size:10px;color:#aaa;text-align:center">No barcode</p>`}
           <p class="price">${priceStr}</p>
           <p class="sku">${v.sku ?? code}</p>
         </div>`).join("");
     }).join("");
 
-    const { width_mm, height_mm } = LABEL_PRESETS[preset];
-
     pw.document.write(`<!DOCTYPE html><html><head><title>Labels</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
       body{background:#fff;font-family:'Courier New',monospace}
-      .grid{display:flex;flex-wrap:wrap;gap:4px;padding:4px}
+      .grid{display:flex;flex-wrap:wrap;gap:3px;padding:4px}
       .label{
         width:${width_mm}mm;height:${height_mm}mm;
-        border:0.5px solid #ccc;padding:3px;
+        border:0.5px solid #ccc;padding:2px 3px;
         display:flex;flex-direction:column;align-items:center;
-        justify-content:space-between;overflow:hidden;break-inside:avoid
+        justify-content:space-between;overflow:hidden;break-inside:avoid;page-break-inside:avoid
       }
-      .name{font-size:8px;font-weight:700;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .variant{font-size:7px;color:#555;text-align:center}
-      .bc{width:100%;height:auto;max-height:${Math.round(height_mm * 0.45)}mm}
-      .price{font-size:11px;font-weight:700;text-align:center}
-      .sku{font-size:6px;color:#888;text-align:center;letter-spacing:0.5px}
-      @media print{@page{margin:4mm}button{display:none!important}}
+      .name{font-size:15px;font-weight:700;text-align:center;line-height:1.2;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+      .variant{font-size:18px;font-weight:700;color:#111;text-align:center}
+      .bc{width:100%;height:auto;max-height:${Math.round(height_mm * 0.42)}mm;object-fit:contain}
+      .price{font-size:22px;font-weight:700;text-align:center}
+      .sku{font-size:11px;color:#666;text-align:center;letter-spacing:0.5px}
+      @media print{
+        @page{margin:0;size:${width_mm}mm ${height_mm}mm}
+        body{margin:0}
+        .grid{padding:0;gap:0}
+        .no-print{display:none!important}
+      }
     </style></head><body>
-    <div style="padding:4px;display:flex;gap:4px;margin-bottom:8px;background:#f5f5f5">
+    <div class="no-print" style="padding:6px;display:flex;gap:6px;background:#f0f0f0;margin-bottom:6px">
       <button onclick="window.print()" style="background:#0d9488;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;cursor:pointer">🖨 Print</button>
       <button onclick="window.close()" style="background:#6b7280;color:#fff;border:none;padding:6px 16px;border-radius:6px;font-size:12px;cursor:pointer">Close</button>
       <span style="font-size:11px;color:#555;align-self:center">${totalLabels} labels · ${width_mm}×${height_mm}mm</span>
     </div>
     <div class="grid">${rows}</div>
-    <script>
-      window.onload = function(){
-        document.querySelectorAll('svg.bc').forEach(function(el){
-          var code = el.getAttribute('data-code');
-          try{ JsBarcode(el, code, {format:'CODE128',width:1.2,height:30,displayValue:true,fontSize:8,margin:2}); }catch(e){}
-        });
-        setTimeout(function(){ window.print(); }, 600);
-      };
-    <\/script></body></html>`);
+    </body></html>`);
     pw.document.close();
   }
 
@@ -319,6 +322,8 @@ export default function BarcodesPage() {
             ) : (
               <>
                 <span className="rounded-lg bg-teal-900 border border-teal-600 px-3 py-1.5 text-xs font-semibold text-teal-300">● Connected</span>
+                <button onClick={async () => { try { await testPrint(); setPrinterStatus("✅ TSPL test sent — check paper & console"); } catch(e:any){setPrinterStatus("❌ "+e.message);}}} className="rounded-lg border border-amber-600 bg-amber-900/30 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-900/60">🧪 TSPL Test</button>
+                <button onClick={async () => { try { await testPrintEscPos(); setPrinterStatus("✅ ESC/POS test sent — check paper & console"); } catch(e:any){setPrinterStatus("❌ "+e.message);}}} className="rounded-lg border border-blue-600 bg-blue-900/30 px-3 py-1.5 text-xs text-blue-300 hover:bg-blue-900/60">🧪 ESC Test</button>
                 <button onClick={async () => { await calibratePrinter(); setPrinterStatus("Calibrating…"); }} className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-xs text-white hover:bg-slate-600">Calibrate</button>
                 <button onClick={async () => { await disconnectPrinter(); setPrinterConnected(false); setPrinterStatus(null); }} className="rounded-lg border border-rose-700 bg-rose-900/30 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-900/60">Disconnect</button>
               </>

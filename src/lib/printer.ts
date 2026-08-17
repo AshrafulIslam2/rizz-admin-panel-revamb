@@ -58,12 +58,9 @@ export async function disconnectPrinter(): Promise<void> {
 }
 
 async function sendRaw(data: Uint8Array): Promise<void> {
-  if (!_device?.opened) throw new Error("Printer not connected. Click 'Connect Printer' first.");
-  // Send in 64-byte chunks to avoid USB transfer size limits
-  const CHUNK = 64;
-  for (let i = 0; i < data.length; i += CHUNK) {
-    await _device.transferOut(_endpointOut, data.slice(i, i + CHUNK));
-  }
+  if (!_device || !_device.opened) throw new Error("Printer not connected. Click 'Connect Printer' first.");
+  // Send as single transfer — let the USB stack handle packetization
+  await _device.transferOut(_endpointOut, data);
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -226,7 +223,7 @@ export async function printReceipt(data: ReceiptData): Promise<void> {
 
 // ─── TSPL Label Printing ──────────────────────────────────────────────────────
 
-// 1 mm = 8 dots at 203 DPI
+// 1 mm ≈ 7.87 dots at 200 DPI (Rongta RP80VI), rounded to 8
 const MM_TO_DOT = 8;
 
 export type LabelData = {
@@ -248,11 +245,11 @@ export type LabelData = {
   qty?: number;               // copies to print (default 1)
 };
 
-/** Label size presets */
+/** Label size presets — based on actual Rongta RP80VI driver settings (200 DPI) */
 export const LABEL_PRESETS = {
-  small:  { width_mm: 40, height_mm: 25, label: "40×25 mm (small tag)" },
-  medium: { width_mm: 60, height_mm: 40, label: "60×40 mm (shoe label)" },
-  large:  { width_mm: 80, height_mm: 50, label: "80×50 mm (full label)" },
+  standard: { width_mm: 76, height_mm: 180, label: "76×180 mm (standard)" },
+  medium:   { width_mm: 76, height_mm:  90, label: "76×90 mm (half)" },
+  small:    { width_mm: 76, height_mm:  50, label: "76×50 mm (small tag)" },
 } as const;
 
 export async function printLabel(data: LabelData): Promise<void> {
@@ -271,56 +268,73 @@ export async function printLabel(data: LabelData): Promise<void> {
   } else {
     lines.push(`GAP ${data.gap_mm ?? 3} mm, 0 mm`);
   }
-  lines.push("DIRECTION 0,0");
-  lines.push("REFERENCE 0,0");
-  lines.push("OFFSET 0 mm");
-  lines.push("SET PEEL OFF");
-  lines.push("SET CUTTER OFF");
+  lines.push("SPEED 4");
+  lines.push("DENSITY 8");    // matches Rongta driver default (density=8)
+  lines.push("DIRECTION 0");
   lines.push("CLS");
 
-  // ── Layout positions (dots) ──
-  const margin = 16;
+  // ── Layout (200 DPI, 1mm ≈ 8 dots) ──
+  const margin = 24;   // 3mm
   let y = margin;
 
-  // Product name — font "3" (16×24 dots), bold
-  const name = data.product_name.slice(0, 24);
-  lines.push(`BOLD 1`);
-  lines.push(`TEXT ${margin}, ${y}, "3", 0, 1, 1, "${name}"`);
-  lines.push(`BOLD 0`);
-  y += 28;
+  // Shop name — small header
+  lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "RIZZ LEATHER"`);
+  y += 18;
 
-  // Variant (size / color)
+  // Divider
+  lines.push(`BAR ${margin}, ${y}, ${W - margin * 2}, 2`);
+  y += 10;
+
+  // Product name — 2 lines max, large
+  const namePart1 = data.product_name.slice(0, 18);
+  const namePart2 = data.product_name.slice(18, 36);
+  lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "${namePart1}"`);
+  y += 30;
+  if (namePart2) {
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "${namePart2}"`);
+    y += 30;
+  }
+
+  // Variant size/color
   if (data.variant_name) {
-    lines.push(`TEXT ${margin}, ${y}, "2", 0, 1, 1, "${data.variant_name}"`);
-    y += 24;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "Size: ${data.variant_name}"`);
+    y += 30;
   }
 
-  // Price
-  const priceStr = data.sale_price
-    ? `Tk ${data.sale_price.toLocaleString("en-US")}  (Tk ${data.price.toLocaleString("en-US")})`
-    : `Tk ${data.price.toLocaleString("en-US")}`;
-  lines.push(`TEXT ${margin}, ${y}, "2", 0, 1, 1, "${priceStr}"`);
-  y += 28;
+  y += 8;
 
-  // Barcode (CODE128 centered, height = remaining space minus footer)
+  // Price — extra large
+  if (data.sale_price) {
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 3, 3, "Tk ${data.sale_price.toLocaleString("en-US")}"`);
+    y += 44;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "MRP: Tk ${data.price.toLocaleString("en-US")}"`);
+    y += 18;
+  } else {
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 3, 3, "Tk ${data.price.toLocaleString("en-US")}"`);
+    y += 44;
+  }
+
+  y += 12;
+
+  // Barcode — tall on 180mm label
   if (barcodeData) {
-    const barcodeH = Math.max(40, H - y - 36);
-    // narrow=2 wide=4 → good scan reliability
+    const barcodeH = Math.min(220, Math.max(80, H - y - 50));
     lines.push(`BARCODE ${margin}, ${y}, "${barcodeType}", ${barcodeH}, 1, 0, 2, 4, "${barcodeData}"`);
-    y += barcodeH + 4;
+    y += barcodeH + 6;
   }
 
-  // SKU text under barcode
-  if (data.sku) {
-    lines.push(`TEXT ${margin}, ${y}, "1", 0, 1, 1, "SKU: ${data.sku}"`);
+  // SKU under barcode
+  if (data.sku && y < H - 20) {
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "SKU: ${data.sku}"`);
+    y += 18;
   }
 
-  // QR code (bottom-right corner, small)
+  // QR bottom-right
   if (data.show_qr && barcodeData) {
-    const qrSize = 4;
-    const qrX = W - (qrSize * 10) - margin;
-    const qrY = H - (qrSize * 10) - margin;
-    lines.push(`QRCODE ${qrX}, ${qrY}, H, ${qrSize}, A, 0, M2, "${barcodeData}"`);
+    const qrSize = 5;
+    const qrX = W - (qrSize * 12) - margin;
+    const qrY = H - (qrSize * 12) - margin;
+    if (qrY > y) lines.push(`QRCODE ${qrX}, ${qrY}, H, ${qrSize}, A, 0, M2, "${barcodeData}"`);
   }
 
   // ── Print ──
@@ -331,9 +345,49 @@ export async function printLabel(data: LabelData): Promise<void> {
 
 // ─── Calibration ─────────────────────────────────────────────────────────────
 
+/** TSPL minimal test — prints "RIZZ TEST" text + barcode */
+export async function testPrint(width_mm = 76, height_mm = 180): Promise<void> {
+  const cmd = [
+    `SIZE ${width_mm} mm, ${height_mm} mm`,
+    "GAP 3 mm, 0 mm",
+    "SPEED 4",
+    "DENSITY 8",
+    "DIRECTION 0",
+    "CLS",
+    'TEXT 24, 24, "0", 0, 2, 2, "RIZZ LEATHER"',
+    'TEXT 24, 60, "0", 0, 3, 3, "TEST PRINT"',
+    'TEXT 24, 110, "0", 0, 1, 1, "If you see this, TSPL works!"',
+    'BARCODE 24, 140, "CODE128", 120, 1, 0, 2, 4, "123456789"',
+    "PRINT 1, 1",
+  ].join("\r\n") + "\r\n";
+  console.log("[TSPL] Sending:\n", cmd);
+  const result = await _device!.transferOut(_endpointOut, enc(cmd));
+  console.log("[TSPL] transferOut result:", result.status, "bytes:", result.bytesWritten);
+}
+
+/** ESC/POS test — if this prints text on label paper, printer is in ESC/POS mode */
+export async function testPrintEscPos(): Promise<void> {
+  const ESC = 0x1b; const GS = 0x1d; const LF = 0x0a;
+  const buf = new Uint8Array([
+    ESC, 0x40,        // INIT
+    ESC, 0x61, 0x01,  // CENTER
+    ESC, 0x45, 0x01,  // BOLD ON
+    ...enc("RIZZ TEST\n"),
+    ESC, 0x45, 0x00,  // BOLD OFF
+    ...enc("ESC/POS MODE ACTIVE\n"),
+    ...enc("If you see this text,\n"),
+    ...enc("printer is in ESC/POS mode.\n"),
+    LF, LF, LF, LF,
+    GS, 0x56, 0x42, 0x00, // partial cut
+  ]);
+  console.log("[ESC/POS] Sending test, bytes:", buf.length);
+  const result = await _device!.transferOut(_endpointOut, buf);
+  console.log("[ESC/POS] transferOut result:", result.status, "bytes:", result.bytesWritten);
+}
+
 /** Run auto-calibration (detects gap/black-mark, aligns first label). */
 export async function calibratePrinter(): Promise<void> {
-  const cmd = "SET CUTTER OFF\r\nSET PEEL OFF\r\nCALIBRATE\r\n";
+  const cmd = "SPEED 4\r\nDENSITY 10\r\nCALIBRATE\r\n";
   await sendRaw(enc(cmd));
 }
 
