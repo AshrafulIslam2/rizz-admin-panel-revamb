@@ -21,6 +21,22 @@ type Variant = {
 
 type LabelPresetKey = keyof typeof LABEL_PRESETS;
 
+// When a variant has no dedicated `barcode` value, falling back to the full
+// SKU (e.g. "RIZZ-q32nw6-41-Tan-1781976585079") makes CODE128 encode 30+
+// characters — on a small label that forces the bars so thin they blur
+// together and stop scanning. SKUs here end in a long numeric run that's
+// the real serial, so pull just that out instead; only fall back to the
+// full SKU if no such run exists.
+function shortBarcodeCode(v: Variant): string {
+  if (v.barcode) return v.barcode;
+  if (v.sku) {
+    const digits = v.sku.replace(/\D/g, "");
+    if (digits.length >= 6) return digits.slice(-13);
+    return v.sku;
+  }
+  return v.id.slice(-8);
+}
+
 // ─── Barcode canvas (uses JsBarcode lazily) ───────────────────────────────────
 function BarcodeCanvas({ code, show }: { code: string; show: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -63,7 +79,7 @@ function LabelCard({
   onToggle: () => void;
   onQtyChange: (n: number) => void;
 }) {
-  const code = v.barcode || v.sku || v.id.slice(-8);
+  const code = shortBarcodeCode(v);
   const size  = v.attributes?.size  ?? "—";
   const color = v.attributes?.color ?? "—";
 
@@ -138,7 +154,7 @@ export default function BarcodesPage() {
   const [printing, setPrinting] = useState(false);
 
   // Label settings
-  const [preset, setPreset] = useState<LabelPresetKey>("standard");
+  const [preset, setPreset] = useState<LabelPresetKey>("dtsticker");
   const [showQr, setShowQr] = useState(false);
 
   // Load all variants
@@ -188,34 +204,73 @@ export default function BarcodesPage() {
   const totalLabels  = selectedList.reduce((s, v) => s + (qtys[v.id] ?? 1), 0);
 
   // ── Browser print ─────────────────────────────────────────────────────────
-  function browserPrint() {
+  async function browserPrint() {
     const pw = window.open("", "_blank");
     if (!pw) { alert("Popup blocked! Allow popups for this site."); return; }
 
-    // Grab already-rendered barcode canvas images as data URLs (no CDN needed)
-    const canvasMap: Record<string, string> = {};
-    document.querySelectorAll<HTMLCanvasElement>("canvas[data-barcode-canvas]").forEach((c) => {
-      const code = c.getAttribute("data-barcode-canvas");
-      if (code && c.width > 0) canvasMap[code] = c.toDataURL("image/png");
+    // Render barcodes as vector SVG (not a raster canvas→PNG). The on-screen
+    // preview canvas is small, and stretching that small raster image up to
+    // fill a 76mm-wide label via CSS blurs the bar edges — that's what makes
+    // it look "japsha" and can make it unscannable. SVG stays crisp at any
+    // print size since it's drawn as exact vector rectangles, not pixels.
+    const { default: JsBarcode } = await import("jsbarcode");
+    const barcodeMap: Record<string, string> = {};
+    selectedList.forEach((v) => {
+      const code = shortBarcodeCode(v);
+      if (barcodeMap[code]) return;
+      try {
+        const svgEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        JsBarcode(svgEl, code, {
+          format: "CODE128", width: 2, height: 60,
+          displayValue: true, fontSize: 16, margin: 4,
+        });
+        barcodeMap[code] = svgEl.outerHTML;
+      } catch {}
     });
 
     const { width_mm, height_mm } = LABEL_PRESETS[preset];
 
+    // Font sizes scale with the *physical* label size (mm, not px) so they
+    // stay legible whether this is a 35mm-tall DT sticker or a 180mm roll —
+    // fixed px sizes tuned for one stock overflow or shrink to nothing on
+    // another.
+    const clamp = (min: number, val: number, max: number) => Math.min(max, Math.max(min, val));
+    const nameCapMM    = +clamp(2.4, height_mm * 0.075, 5.5).toFixed(2);
+    const variantMM    = +clamp(1.9, height_mm * 0.065, 4.5).toFixed(2);
+    const priceMM      = +clamp(3.0, height_mm * 0.10,  7.0).toFixed(2);
+    const skuCapMM      = +clamp(2.0, height_mm * 0.08,  3.6).toFixed(2);
+    const mrpMM         = +(priceMM * 0.5).toFixed(2);
+
+    // Long product names / SKUs get shrunk to fit the label's actual width
+    // instead of using one fixed size for every row — a fixed size either
+    // clips long text or leaves short text needlessly tiny.
+    const innerWidthMm = Math.max(10, width_mm - 5);
+    function fitMM(text: string, lines: number, capMM: number, minMM: number): number {
+      const CHAR_W = 0.62; // Courier New average advance, as a fraction of font-size
+      const len = Math.max(1, text.length);
+      const budget = (innerWidthMm * lines) / (len * CHAR_W);
+      return +clamp(minMM, budget, capMM).toFixed(2);
+    }
+
     const rows = selectedList.map((v) => {
-      const code     = v.barcode || v.sku || v.id.slice(-8);
+      const code     = shortBarcodeCode(v);
       const qty      = qtys[v.id] ?? 1;
-      const imgSrc   = canvasMap[code] ?? "";
+      const svgSrc   = barcodeMap[code] ?? "";
       const priceStr = v.sale_price
-        ? `৳${v.sale_price.toLocaleString()} <s style="font-size:13px;color:#777">৳${v.price.toLocaleString()}</s>`
+        ? `৳${v.sale_price.toLocaleString()} <s style="font-size:${mrpMM}mm;color:#777">৳${v.price.toLocaleString()}</s>`
         : `৳${v.price.toLocaleString()}`;
+      const nameText = v.product?.name ?? "";
+      const skuText  = v.sku ?? code;
+      const nameSizeMM = fitMM(nameText, 2, nameCapMM, 2.0);
+      const skuSizeMM  = fitMM(skuText, 1, skuCapMM, 1.6);
 
       return Array.from({ length: qty }, () => `
         <div class="label">
-          <p class="name">${v.product?.name ?? ""}</p>
+          <p class="name" style="font-size:${nameSizeMM}mm">${nameText}</p>
           <p class="variant">${v.attributes?.size ?? ""} / ${v.attributes?.color ?? ""}</p>
-          ${imgSrc ? `<img src="${imgSrc}" class="bc" />` : `<p style="font-size:10px;color:#aaa;text-align:center">No barcode</p>`}
+          ${svgSrc ? `<div class="bc">${svgSrc}</div>` : `<p style="font-size:${variantMM}mm;color:#aaa;text-align:center">No barcode</p>`}
           <p class="price">${priceStr}</p>
-          <p class="sku">${v.sku ?? code}</p>
+          <p class="sku" style="font-size:${skuSizeMM}mm">${skuText}</p>
         </div>`).join("");
     }).join("");
 
@@ -226,15 +281,16 @@ export default function BarcodesPage() {
       .grid{display:flex;flex-wrap:wrap;gap:3px;padding:4px}
       .label{
         width:${width_mm}mm;height:${height_mm}mm;
-        border:0.5px solid #ccc;padding:2px 3px;
+        border:0.5px solid #ccc;padding:2mm 2.2mm;
         display:flex;flex-direction:column;align-items:center;
         justify-content:space-between;overflow:hidden;break-inside:avoid;page-break-inside:avoid
       }
-      .name{font-size:15px;font-weight:700;text-align:center;line-height:1.2;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-      .variant{font-size:18px;font-weight:700;color:#111;text-align:center}
-      .bc{width:100%;height:auto;max-height:${Math.round(height_mm * 0.42)}mm;object-fit:contain}
-      .price{font-size:22px;font-weight:700;text-align:center}
-      .sku{font-size:11px;color:#666;text-align:center;letter-spacing:0.5px}
+      .name{font-weight:700;text-align:center;line-height:1.2;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+      .variant{font-size:${variantMM}mm;font-weight:700;color:#111;text-align:center}
+      .bc{width:100%;max-height:${Math.round(height_mm * 0.42)}mm;overflow:hidden;text-align:center;line-height:0}
+      .bc svg{display:inline-block;width:auto;height:auto;max-width:100%;max-height:100%;margin:0 auto;shape-rendering:crispEdges}
+      .price{font-size:${priceMM}mm;font-weight:700;text-align:center}
+      .sku{font-weight:700;color:#333;text-align:center;letter-spacing:0.5px}
       @media print{
         @page{margin:0;size:${width_mm}mm ${height_mm}mm}
         body{margin:0}
@@ -279,7 +335,7 @@ export default function BarcodesPage() {
           price: v.price,
           sale_price: v.sale_price ?? undefined,
           sku: v.sku,
-          barcode: v.barcode ?? v.sku,
+          barcode: shortBarcodeCode(v),
           show_qr: showQr,
           qty,
         };

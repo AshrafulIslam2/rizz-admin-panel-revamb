@@ -247,9 +247,10 @@ export type LabelData = {
 
 /** Label size presets — based on actual Rongta RP80VI driver settings (200 DPI) */
 export const LABEL_PRESETS = {
-  standard: { width_mm: 76, height_mm: 180, label: "76×180 mm (standard)" },
-  medium:   { width_mm: 76, height_mm:  90, label: "76×90 mm (half)" },
-  small:    { width_mm: 76, height_mm:  50, label: "76×50 mm (small tag)" },
+  standard:  { width_mm: 76, height_mm: 180, label: "76×180 mm (standard)" },
+  medium:    { width_mm: 76, height_mm:  90, label: "76×90 mm (half)" },
+  small:     { width_mm: 76, height_mm:  50, label: "76×50 mm (small tag)" },
+  dtsticker: { width_mm: 45, height_mm:  35, label: "45×35 mm (DT sticker)" },
 } as const;
 
 export async function printLabel(data: LabelData): Promise<void> {
@@ -274,57 +275,70 @@ export async function printLabel(data: LabelData): Promise<void> {
   lines.push("CLS");
 
   // ── Layout (200 DPI, 1mm ≈ 8 dots) ──
-  const margin = 24;   // 3mm
+  // Tiny stock (e.g. 45×35mm DT stickers) needs a tighter layout — the
+  // standard spacing below is tuned for the 180mm roll and overflows a
+  // short label.
+  const compact = data.height_mm <= 40;
+  const margin = compact ? 12 : 24;   // 1.5mm vs 3mm
   let y = margin;
 
-  // Shop name — small header
-  lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "RIZZ LEATHER"`);
-  y += 18;
+  if (!compact) {
+    // Shop name — small header
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "RIZZ LEATHER"`);
+    y += 18;
 
-  // Divider
-  lines.push(`BAR ${margin}, ${y}, ${W - margin * 2}, 2`);
-  y += 10;
+    // Divider
+    lines.push(`BAR ${margin}, ${y}, ${W - margin * 2}, 2`);
+    y += 10;
+  }
 
-  // Product name — 2 lines max, large
-  const namePart1 = data.product_name.slice(0, 18);
-  const namePart2 = data.product_name.slice(18, 36);
-  lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "${namePart1}"`);
-  y += 30;
+  // Product name — 2 lines max
+  const nameSize = compact ? 1 : 2;
+  const nameStep = compact ? 16 : 30;
+  const nameChars = compact ? 14 : 18;
+  const namePart1 = data.product_name.slice(0, nameChars);
+  const namePart2 = data.product_name.slice(nameChars, nameChars * 2);
+  lines.push(`TEXT ${margin}, ${y}, "0", 0, ${nameSize}, ${nameSize}, "${namePart1}"`);
+  y += nameStep;
   if (namePart2) {
-    lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "${namePart2}"`);
-    y += 30;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, ${nameSize}, ${nameSize}, "${namePart2}"`);
+    y += nameStep;
   }
 
   // Variant size/color
   if (data.variant_name) {
-    lines.push(`TEXT ${margin}, ${y}, "0", 0, 2, 2, "Size: ${data.variant_name}"`);
-    y += 30;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, ${nameSize}, ${nameSize}, "Size: ${data.variant_name}"`);
+    y += nameStep;
   }
 
-  y += 8;
+  y += compact ? 4 : 8;
 
   // Price — extra large
+  const priceSize = compact ? 2 : 3;
+  const priceStep = compact ? 26 : 44;
   if (data.sale_price) {
-    lines.push(`TEXT ${margin}, ${y}, "0", 0, 3, 3, "Tk ${data.sale_price.toLocaleString("en-US")}"`);
-    y += 44;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, ${priceSize}, ${priceSize}, "Tk ${data.sale_price.toLocaleString("en-US")}"`);
+    y += priceStep;
     lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "MRP: Tk ${data.price.toLocaleString("en-US")}"`);
-    y += 18;
+    y += compact ? 14 : 18;
   } else {
-    lines.push(`TEXT ${margin}, ${y}, "0", 0, 3, 3, "Tk ${data.price.toLocaleString("en-US")}"`);
-    y += 44;
+    lines.push(`TEXT ${margin}, ${y}, "0", 0, ${priceSize}, ${priceSize}, "Tk ${data.price.toLocaleString("en-US")}"`);
+    y += priceStep;
   }
 
-  y += 12;
+  y += compact ? 6 : 12;
 
-  // Barcode — tall on 180mm label
+  // Barcode — TSPL's own "readable" flag (the "1" below) already prints the
+  // code as text under the bars, so a compact label skips the extra SKU
+  // line below and just leans on that.
   if (barcodeData) {
-    const barcodeH = Math.min(220, Math.max(80, H - y - 50));
+    const barcodeH = Math.min(compact ? 110 : 220, Math.max(50, H - y - (compact ? 10 : 50)));
     lines.push(`BARCODE ${margin}, ${y}, "${barcodeType}", ${barcodeH}, 1, 0, 2, 4, "${barcodeData}"`);
-    y += barcodeH + 6;
+    y += barcodeH + (compact ? 4 : 6);
   }
 
-  // SKU under barcode
-  if (data.sku && y < H - 20) {
+  // SKU under barcode (only when there's genuine room to spare)
+  if (data.sku && !compact && y < H - 20) {
     lines.push(`TEXT ${margin}, ${y}, "0", 0, 1, 1, "SKU: ${data.sku}"`);
     y += 18;
   }
