@@ -120,7 +120,10 @@ const ESCPOS = {
   SIZE_2X:      new Uint8Array([GS,  0x21, 0x11]), // double width+height
   LF:           new Uint8Array([LF]),
   FEED4:        new Uint8Array([ESC, 0x64, 0x04]),
-  CUT:          new Uint8Array([GS,  0x56, 0x42, 0x00]), // partial cut
+  // Feed past the tear bar. This printer has no cutter, so the paper must be
+  // advanced far enough that tearing doesn't cut into the printed footer.
+  FEED_TEAR:    new Uint8Array([ESC, 0x64, 0x06]),
+  CUT:          new Uint8Array([GS,  0x56, 0x42, 0x00]), // partial cut (unused: RP80VI has no cutter)
 };
 
 export type ReceiptData = {
@@ -214,8 +217,11 @@ export async function printReceipt(data: ReceiptData): Promise<void> {
     enc("Exchange within 3 days.\n"),
     enc("No exchange on sale items.\n"),
     enc((data.footer ?? "Thank you for shopping with RIZZ!") + "\n"),
-    ESCPOS.FEED4,
-    ESCPOS.CUT,
+    // The RP80VI has no auto-cutter (its spec says "Manual tearing"), so the
+    // cut command is dropped and replaced with enough feed to push the last
+    // printed line clear of the tear bar — otherwise you'd rip through the
+    // footer every time.
+    ESCPOS.FEED_TEAR,
   );
 
   await sendRaw(concat(...buf));

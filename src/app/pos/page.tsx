@@ -16,7 +16,7 @@ type CartItem = { variant_id: string; name: string; color: string; size: string;
 // Thermal receipt RIZZ logo (SVG inline, matches the black+white R brand mark)
 function RizzLogo() {
   return (
-    <svg width="64" height="64" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
       <rect width="100" height="100" fill="black" />
       {/* Stylised R */}
       <path d="M28 20 L28 80 M28 20 L58 20 Q78 20 78 40 Q78 55 60 58 L78 80" stroke="white" strokeWidth="9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -87,15 +87,15 @@ function EscPosButton({ receipt }: { receipt: any }) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 flex-1">
       <button
         onClick={handlePrint}
         disabled={printing}
-        className="flex-1 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
+        className="w-full rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60"
       >
-        {printing ? "Printing…" : connected ? "🖨 ESC/POS Print" : "🔌 Connect & Print"}
+        {printing ? "Printing…" : connected ? "🖨 Print Receipt" : "🔌 Connect & Print Receipt"}
       </button>
-      {status && <p className="text-[11px] text-center text-slate-500">{status}</p>}
+      {status && <p className="text-[11px] text-center text-slate-400">{status}</p>}
     </div>
   );
 }
@@ -116,27 +116,47 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
     <>
       {/* Print-only styles */}
       <style>{`
+        /* Both values must be real lengths. "80mm auto" is NOT valid CSS —
+           mixing a length with the auto keyword makes the browser throw the
+           whole size declaration away, fall back to the printer's default
+           paper (the 45x35mm label), and because that stock is wider than it
+           is tall it prints sideways. An explicit taller-than-wide size keeps
+           the page portrait and stops the driver rescaling it. */
+        @page { size: 80mm 150mm; margin: 0; }
+
         @media print {
+          html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; background: #fff !important; }
           * { visibility: hidden !important; }
           #receipt-print-root, #receipt-print-root * { visibility: visible !important; }
-          #receipt-print-root { position: fixed !important; top: 0 !important; left: 0 !important; width: 80mm !important; background: white !important; }
+          #receipt-print-root {
+            position: absolute !important; top: 0 !important; left: 0 !important;
+            width: 80mm !important; max-width: 80mm !important;
+            padding: 2mm 3mm !important; margin: 0 !important;
+            background: white !important; box-shadow: none !important;
+          }
+          /* Thermal heads turn thin greys to mush — force solid black. */
+          #receipt-print-root * { color: #000 !important; }
         }
         @media screen {
           #receipt-print-root { max-width: 340px; }
         }
-        .receipt-font { font-family: 'Courier New', Courier, monospace; }
-        .receipt-divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-        .receipt-row { display: flex; justify-content: space-between; font-size: 12px; line-height: 1.6; }
-        .receipt-row-bold { font-weight: 700; font-size: 13px; }
+        /* Sizes in mm so they mean the same thing on screen and on paper.
+           Line-heights and divider gaps are kept tight on purpose: the whole
+           receipt has to land inside one 150mm page, and loose leading was
+           what pushed the footer onto a second page. */
+        .receipt-font { font-family: 'Courier New', Courier, monospace; font-size: 3mm; }
+        .receipt-divider { border: none; border-top: 0.4mm dashed #000; margin: 0.9mm 0; }
+        .receipt-row { display: flex; justify-content: space-between; font-size: 3mm; line-height: 1.3; }
+        .receipt-row-bold { font-weight: 700; font-size: 3.6mm; line-height: 1.35; }
       `}</style>
 
       <div id="receipt-print-root" className="mx-auto bg-white text-black receipt-font p-4 shadow-xl" style={{ maxWidth: 340 }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 6 }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+        <div style={{ textAlign: "center", marginBottom: "1mm" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "1mm" }}>
             <RizzLogo />
           </div>
-          <div style={{ fontSize: 11, lineHeight: 1.5 }}>
+          <div style={{ fontSize: "2.8mm", lineHeight: 1.3 }}>
             <div>Shop-345, 3rd Floor (Lift-3), Afmi Plaza</div>
             <div>Panchlaish, Chattagram</div>
             <div>Call: 01627472686</div>
@@ -146,7 +166,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
         <hr className="receipt-divider" />
 
         {/* Invoice meta */}
-        <div style={{ fontSize: 11, lineHeight: 1.7 }}>
+        <div style={{ fontSize: "2.9mm", lineHeight: 1.3 }}>
           <div className="receipt-row"><span>Date</span><span>{dateStr}</span></div>
           <div className="receipt-row"><span>Counter No</span><span>1</span></div>
           <div className="receipt-row"><span>Invoice</span><span style={{ fontWeight: 700 }}>{receipt.tx_number}</span></div>
@@ -157,7 +177,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
         <hr className="receipt-divider" />
 
         {/* Items table */}
-        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 12, marginBottom: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "3mm", marginBottom: "0.8mm" }}>
           <span>Item / Description</span>
           <span>Amount</span>
         </div>
@@ -165,7 +185,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
           const itemTotal = item.price * item.qty;
           const desc = [item.color, item.size].filter(Boolean).join(" / ");
           return (
-            <div key={i} style={{ marginBottom: 4, fontSize: 11 }}>
+            <div key={i} style={{ marginBottom: "0.8mm", fontSize: "2.9mm", lineHeight: 1.25 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ flex: 1, paddingRight: 8 }}>
                   {item.name}{desc ? ` (${desc})` : ""} ×{item.qty} @ ৳{item.price}
@@ -179,7 +199,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
         <hr className="receipt-divider" />
 
         {/* Totals */}
-        <div style={{ fontSize: 12 }}>
+        <div style={{ fontSize: "3mm" }}>
           <div className="receipt-row"><span>Item Total</span><span>৳{subtotal.toLocaleString()}</span></div>
           <div className="receipt-row"><span>Item Discount</span><span>৳{itemDiscount.toLocaleString()}</span></div>
           <div className="receipt-row"><span>Other Discount</span><span>৳{otherDiscount.toFixed(2)}</span></div>
@@ -189,7 +209,7 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
 
         <hr className="receipt-divider" />
 
-        <div style={{ fontSize: 13 }}>
+        <div style={{ fontSize: "3.6mm" }}>
           <div className="receipt-row receipt-row-bold"><span>Net Payable</span><span>৳{netPayable.toLocaleString()}</span></div>
           <div className="receipt-row receipt-row-bold"><span>Paid</span><span>৳{paid.toLocaleString()}</span></div>
           <div className="receipt-row receipt-row-bold"><span>Change</span><span>৳{Math.max(0, change).toLocaleString()}</span></div>
@@ -199,48 +219,59 @@ function Receipt({ receipt, onClose }: { receipt: any; onClose: () => void }) {
         {(receipt.payment_cash > 0 || receipt.payment_card > 0 || receipt.payment_mobile > 0) && (
           <>
             <hr className="receipt-divider" />
-            <div style={{ fontSize: 11, marginBottom: 4, fontWeight: 600 }}>
+            <div style={{ fontSize: "2.9mm", marginBottom: "0.6mm", fontWeight: 600 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span>Payment Name</span><span>Amount</span>
               </div>
             </div>
-            {receipt.payment_cash > 0 && <div className="receipt-row" style={{ fontSize: 11 }}><span>Cash</span><span>৳{Number(receipt.payment_cash).toLocaleString()}</span></div>}
-            {receipt.payment_card > 0 && <div className="receipt-row" style={{ fontSize: 11 }}><span>Card</span><span>৳{Number(receipt.payment_card).toLocaleString()}</span></div>}
-            {receipt.payment_mobile > 0 && <div className="receipt-row" style={{ fontSize: 11 }}><span>Mobile (bKash/Nagad)</span><span>৳{Number(receipt.payment_mobile).toLocaleString()}</span></div>}
+            {receipt.payment_cash > 0 && <div className="receipt-row" style={{ fontSize: "2.9mm" }}><span>Cash</span><span>৳{Number(receipt.payment_cash).toLocaleString()}</span></div>}
+            {receipt.payment_card > 0 && <div className="receipt-row" style={{ fontSize: "2.9mm" }}><span>Card</span><span>৳{Number(receipt.payment_card).toLocaleString()}</span></div>}
+            {receipt.payment_mobile > 0 && <div className="receipt-row" style={{ fontSize: "2.9mm" }}><span>Mobile (bKash/Nagad)</span><span>৳{Number(receipt.payment_mobile).toLocaleString()}</span></div>}
           </>
         )}
 
         <hr className="receipt-divider" />
 
         {/* Footer */}
-        <div style={{ fontSize: 10, textAlign: "center", lineHeight: 1.6, marginTop: 4 }}>
+        <div style={{ fontSize: "2.6mm", textAlign: "center", lineHeight: 1.25, marginTop: "0.8mm" }}>
           <p>Please bring this invoice if you want to change the product within 7 days.</p>
           <p>No exchange will be available without invoice.</p>
           <p style={{ fontWeight: 700, marginTop: 4 }}>Thank you for Shopping At RIZZ!</p>
-          <p style={{ marginTop: 6, fontSize: 9 }}>rizzleather.com</p>
+          <p style={{ marginTop: "0.8mm", fontSize: "2.4mm" }}>rizzleather.com</p>
         </div>
 
         {/* Barcode placeholder (tx_number) */}
-        <div style={{ textAlign: "center", marginTop: 8, fontFamily: "monospace", fontSize: 10, letterSpacing: 2 }}>
+        <div style={{ textAlign: "center", marginTop: "1mm", fontFamily: "monospace", fontSize: "2.8mm", letterSpacing: "0.5mm" }}>
           ||| {receipt.tx_number} |||
         </div>
       </div>
 
-      {/* Action buttons (screen only) */}
-      <div className="flex gap-3 mt-4 no-print" style={{ maxWidth: 340, margin: "16px auto 0" }}>
-        <button
-          onClick={() => window.print()}
-          className="flex-1 rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-500"
-        >
-          🖨 Browser Print
-        </button>
-        <EscPosButton receipt={receipt} />
-        <button
-          onClick={onClose}
-          className="flex-1 rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-600"
-        >
-          New Sale
-        </button>
+      {/* Action buttons (screen only).
+          ESC/POS is the primary path: it talks to the printer directly over
+          USB and so ignores the Windows TSPL label driver (which is pinned to
+          45x35mm gap stock and would squash a receipt into a label). Browser
+          Print goes through that driver, so it's kept as the fallback. */}
+      <div className="no-print" style={{ maxWidth: 340, margin: "16px auto 0" }}>
+        <div className="flex gap-3">
+          <EscPosButton receipt={receipt} />
+        </div>
+        <div className="flex gap-3 mt-2">
+          <button
+            onClick={() => window.print()}
+            className="flex-1 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700"
+          >
+            🖨 Browser Print
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-600"
+          >
+            New Sale
+          </button>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-slate-500">
+          Load 80mm continuous paper for receipts (not the 45×35 label roll).
+        </p>
       </div>
     </>
   );
@@ -338,27 +369,41 @@ export default function PosPage() {
       }
     }
     setSaving(true);
-    const res = await fetch(`${API}/pos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customer_name: customer.name || null,
-        customer_phone: customer.phone || null,
-        items: cart.map((c) => ({ variant_id: c.variant_id, name: c.name, color: c.color, size: c.size, price: c.price, original_price: c.original_price, qty: c.qty })),
-        subtotal,
-        sale_discount: saleDiscount,
-        discount_amount: discountAmt,
-        discount_type: discount.type,
-        total,
-        payment_cash: Number(payment.cash),
-        payment_card: Number(payment.card),
-        payment_mobile: Number(payment.mobile),
-        note,
-        status,
-      }),
-    });
-    setSaving(false);
-    if (res.ok) {
+    try {
+      const res = await fetch(`${API}/pos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_name: customer.name || null,
+          customer_phone: customer.phone || null,
+          items: cart.map((c) => ({ variant_id: c.variant_id, name: c.name, color: c.color, size: c.size, price: c.price, original_price: c.original_price, qty: c.qty })),
+          subtotal,
+          sale_discount: saleDiscount,
+          discount_amount: discountAmt,
+          discount_type: discount.type,
+          total,
+          payment_cash: Number(payment.cash),
+          payment_card: Number(payment.card),
+          payment_mobile: Number(payment.mobile),
+          note,
+          status,
+        }),
+      });
+
+      // Surface server-side failures. Without this a non-OK response fell
+      // through with no branch at all, so the button just re-enabled and the
+      // sale vanished with no explanation.
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error("[POS] checkout failed", res.status, body);
+        alert(
+          `Checkout failed — server returned ${res.status}.\n\n` +
+          `API: ${API}/pos\n` +
+          (body ? `\nDetails: ${body.slice(0, 300)}` : "")
+        );
+        return;
+      }
+
       const data = await res.json();
       if (status === "completed") {
         setReceipt(data);
@@ -372,6 +417,19 @@ export default function PosPage() {
       } else {
         alert("Draft saved: " + data.tx_number);
       }
+    } catch (e: any) {
+      // A rejected fetch (backend down, wrong API URL, CORS, or an https page
+      // blocked from calling http://localhost) used to throw past setSaving,
+      // leaving the button stuck on "Processing…" with nothing on screen.
+      console.error("[POS] checkout request error", e);
+      alert(
+        `Could not reach the server.\n\n` +
+        `API: ${API}/pos\n` +
+        `Error: ${e?.message ?? e}\n\n` +
+        `Check that the backend is running and that NEXT_PUBLIC_API_URL points at it.`
+      );
+    } finally {
+      setSaving(false);
     }
   }
 

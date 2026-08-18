@@ -26,6 +26,7 @@ const NAV = [
     section: "Retail & POS",
     items: [
       { label: "POS Terminal", href: "/pos", icon: "⊟" },
+      { label: "Shop Statistics", href: "/shop-statistics", icon: "▦" },
       { label: "Inventory", href: "/inventory", icon: "⊞" },
       { label: "Suppliers", href: "/suppliers", icon: "◩" },
       { label: "Purchase Orders", href: "/purchases", icon: "◪" },
