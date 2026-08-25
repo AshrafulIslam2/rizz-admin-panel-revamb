@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
   printLabel, calibratePrinter, feedLabels, LABEL_PRESETS,
@@ -151,8 +151,56 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
+/**
+ * Fallback only. The real size/colour lists come from the Variant Settings
+ * page (/variant-settings) via the variant-options API; these values are used
+ * just until that request resolves, or if it fails, so the dropdowns are never
+ * empty.
+ */
 const SIZES = ["39", "40", "41", "42", "43", "44", "45"];
 const COLORS = ["Tan", "Brown", "Black", "Dark Brown", "Cognac", "Oxblood"];
+
+/**
+ * Loads the admin-managed size/colour options.
+ *
+ * `extraValues` are values already on this product's variants — they get
+ * merged in so a variant never loses its own size/colour just because that
+ * value isn't in the configured list.
+ */
+function useVariantOptions(extraSizes: string[] = [], extraColors: string[] = []) {
+  const [sizes, setSizes] = useState<string[]>(SIZES);
+  const [colors, setColors] = useState<string[]>(COLORS);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/variant-options/all`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        if (Array.isArray(d.sizes) && d.sizes.length) setSizes(d.sizes);
+        if (Array.isArray(d.colors) && d.colors.length) setColors(d.colors);
+      })
+      .catch(() => { /* keep the fallback lists */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const mergedSizes = useMemo(() => mergeUnique(sizes, extraSizes), [sizes, extraSizes.join("|")]);
+  const mergedColors = useMemo(() => mergeUnique(colors, extraColors), [colors, extraColors.join("|")]);
+
+  return { sizes: mergedSizes, colors: mergedColors };
+}
+
+function mergeUnique(base: string[], extra: string[]): string[] {
+  const seen = new Set(base.map((s) => s.toLowerCase()));
+  const out = [...base];
+  for (const e of extra) {
+    const v = (e ?? "").trim();
+    if (!v || seen.has(v.toLowerCase())) continue;
+    seen.add(v.toLowerCase());
+    out.push(v);
+  }
+  return out;
+}
 
 async function api(path: string, method = "GET", body?: unknown) {
   const r = await fetch(`${API}${path}`, {
@@ -618,6 +666,18 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
+  // Values this product's own variants already use, so they stay selectable
+  // even if they were later removed from the configured option list.
+  const ownSizes = useMemo(
+    () => variants.map((v) => String(v.attributes?.size ?? v.size ?? "")).filter(Boolean),
+    [variants],
+  );
+  const ownColors = useMemo(
+    () => variants.map((v) => String(v.attributes?.color ?? v.color ?? "")).filter(Boolean),
+    [variants],
+  );
+  const { sizes: SIZE_OPTIONS, colors: COLOR_OPTIONS } = useVariantOptions(ownSizes, ownColors);
+
   function toEdit(v: any): VariantEdit {
     return {
       size: String(v.attributes?.size ?? v.size ?? ""),
@@ -726,7 +786,7 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
                         onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, size: e.target.value } }))}
                         className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
                       >
-                        {SIZES.map((s) => <option key={s}>{s}</option>)}
+                        {SIZE_OPTIONS.map((s) => <option key={s}>{s}</option>)}
                       </select>
                     </td>
                     <td className="px-4 py-2.5">
@@ -735,7 +795,7 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
                         onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, color: e.target.value } }))}
                         className="rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
                       >
-                        {COLORS.map((c) => <option key={c}>{c}</option>)}
+                        {COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}
                       </select>
                     </td>
                     <td className="px-4 py-2.5">
@@ -794,13 +854,13 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
           <div>
             <p className={lbl}>Size</p>
             <select value={draft.size} onChange={(e) => setDraft((d) => ({ ...d, size: e.target.value }))} className={field}>
-              {SIZES.map((s) => <option key={s}>{s}</option>)}
+              {SIZE_OPTIONS.map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
             <p className={lbl}>Color</p>
             <select value={draft.color} onChange={(e) => setDraft((d) => ({ ...d, color: e.target.value }))} className={field}>
-              {COLORS.map((c) => <option key={c}>{c}</option>)}
+              {COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div>

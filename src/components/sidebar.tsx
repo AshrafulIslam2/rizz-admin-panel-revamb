@@ -18,6 +18,7 @@ const NAV = [
       { label: "Delivery", href: "/delivery", icon: "▣" },
       { label: "Products", href: "/products", icon: "◻" },
       { label: "Categories", href: "/categories", icon: "◈" },
+      { label: "Variant Settings", href: "/variant-settings", icon: "⋮⋮" },
       { label: "Reviews", href: "/reviews", icon: "◇" },
       { label: "Campaigns", href: "/campaigns", icon: "◆" },
     ],
