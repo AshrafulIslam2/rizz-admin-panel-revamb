@@ -24,6 +24,14 @@ const NAV = [
     ],
   },
   {
+    section: "Wholesale",
+    items: [
+      { label: "Production", href: "/wholesale/production", icon: "⚒" },
+      { label: "Retail Cost Settings", href: "/wholesale/retail-settings", icon: "◱" },
+      { label: "Cost Fields", href: "/wholesale/cost-fields", icon: "☰" },
+    ],
+  },
+  {
     section: "Retail & POS",
     items: [
       { label: "POS Terminal", href: "/pos", icon: "⊟" },
