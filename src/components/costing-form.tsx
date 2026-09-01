@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import {
   CatalogProduct,
   CostField,
+  FactorySettings,
   ProductCosting,
   RetailSettings,
   createCosting,
   getCosting,
+  getFactorySettings,
   getRetailSettings,
   listCatalogProducts,
   listCostFields,
@@ -21,6 +23,7 @@ import {
   calcCosting,
   calcEntry,
   chemicalUnitCost,
+  fieldIsFactoryMonthly,
   fieldIsInActiveMode,
   num,
   sheetPairCost,
@@ -258,6 +261,7 @@ export default function CostingForm({ costingId }: Props) {
   const [subTab, setSubTab] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<CostField[]>([]);
   const [retail, setRetail] = useState<RetailSettings | null>(null);
+  const [factory, setFactory] = useState<FactorySettings | null>(null);
   const [catalog, setCatalog] = useState<CatalogProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -278,7 +282,13 @@ export default function CostingForm({ costingId }: Props) {
   const [values, setValues] = useState<Values>({});
   /** groupId -> "HANDMADE" | "READYMADE". */
   const [modes, setModes] = useState<Record<string, string>>({});
-  const [monthlyProduction, setMonthlyProduction] = useState("");
+  /**
+   * Pairs a month this design yields if the factory ran nothing else.
+   * Set once as a standard — not an actual output figure re-entered monthly.
+   */
+  const [capacityPairs, setCapacityPairs] = useState("");
+  /** What the pool stood at when this record was last saved, for comparison. */
+  const [savedFactoryTotal, setSavedFactoryTotal] = useState<number | null>(null);
   const [wholesalePct, setWholesalePct] = useState("");
   const [retailPct, setRetailPct] = useState("");
 
@@ -292,9 +302,15 @@ export default function CostingForm({ costingId }: Props) {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [f, r, c] = await Promise.all([listCostFields(), getRetailSettings(), listCatalogProducts().catch(() => [])]);
+      const [f, r, fac, c] = await Promise.all([
+        listCostFields(),
+        getRetailSettings(),
+        getFactorySettings(),
+        listCatalogProducts().catch(() => []),
+      ]);
       setFields(f.filter((x) => x.is_active && !x.is_archived));
       setRetail(r);
+      setFactory(fac);
       setCatalog(c);
 
       if (costingId) {
@@ -324,7 +340,8 @@ export default function CostingForm({ costingId }: Props) {
           }
         }
         setValues(v);
-        setMonthlyProduction(String(rec.monthly_production ?? ""));
+        setCapacityPairs(rec.standard_capacity_pairs ? String(rec.standard_capacity_pairs) : "");
+        setSavedFactoryTotal(rec.factory_monthly_total ?? null);
         setWholesalePct(String(rec.wholesale_profit_pct ?? ""));
         setRetailPct(String(rec.retail_profit_pct ?? ""));
         touched.current = new Set();
@@ -346,12 +363,13 @@ export default function CostingForm({ costingId }: Props) {
     return calcCosting({
       values: valuesWithModes,
       fields: fields as unknown as CostFieldLike[],
-      monthlyProductionDozen: num(monthlyProduction),
+      standardCapacityPairs: num(capacityPairs),
+      factoryMonthlyTotal: factory?.total_monthly ?? 0,
       wholesaleProfitPct: num(wholesalePct),
       retailProfitPct: num(retailPct),
       retailCommonCostPair: retail?.retail_common_cost_pair ?? 0,
     });
-  }, [valuesWithModes, fields, monthlyProduction, wholesalePct, retailPct, retail]);
+  }, [valuesWithModes, fields, capacityPairs, factory, wholesalePct, retailPct, retail]);
 
   const bySection = useMemo(() => {
     const m: Record<string, CostField[]> = {};
@@ -456,7 +474,7 @@ export default function CostingForm({ costingId }: Props) {
         ...product,
         product_id: product.product_id || null,
         values: payloadValues,
-        monthly_production: num(monthlyProduction),
+        standard_capacity_pairs: num(capacityPairs),
         wholesale_profit_pct: num(wholesalePct),
         retail_profit_pct: num(retailPct),
       };
@@ -588,7 +606,11 @@ export default function CostingForm({ costingId }: Props) {
 
   // ── Flat section (Factory / Retail product-specific) ──
   function flatSection(section: CostField["section"], perDozenTotal?: number) {
-    const list = bySection[section] ?? [];
+    // Monthly factory bills belong to Factory Cost Settings, not to a product,
+    // so they never appear as inputs here.
+    const list = (bySection[section] ?? []).filter(
+      (f) => !fieldIsFactoryMonthly(f as unknown as CostFieldLike),
+    );
     if (list.length === 0) {
       return (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
@@ -630,7 +652,10 @@ export default function CostingForm({ costingId }: Props) {
         </div>
         {perDozenTotal !== undefined && (
           <div className="mt-6 flex items-center justify-between rounded-2xl border border-teal-200 bg-teal-50 px-5 py-4">
-            <span className="text-sm font-semibold text-teal-900">Total Factory Cost / Dozen</span>
+            <span className="text-sm font-semibold text-teal-900">
+              Total Factory Cost / Dozen
+              <span className="ml-1 font-normal text-teal-700">(allocated share + the above)</span>
+            </span>
             <span className="text-xl font-bold tabular-nums text-teal-800">{taka(perDozenTotal)}</span>
           </div>
         )}
@@ -715,12 +740,78 @@ export default function CostingForm({ costingId }: Props) {
           {tab === "factory" && (
             <div className="space-y-5">
               <h2 className="text-lg font-bold text-slate-900">Factory &amp; Labour</h2>
-              <div className="max-w-xs">
-                <p className={lbl}>Monthly Production (dozen)</p>
-                <input type="number" inputMode="decimal" step="any" value={monthlyProduction}
-                  onChange={(e) => { setMonthlyProduction(e.target.value); setMessage(null); }} placeholder="0" className={input} />
-                <p className="mt-1 text-[11px] text-slate-400">Monthly bills (rent, electricity) are divided by this to reach a per-dozen cost.</p>
+
+              {/* The one number that is genuinely per-design */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h3 className="text-sm font-bold text-slate-900">Standard Production Capacity</h3>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  If the factory made nothing but this design for a whole month, how many pairs would come out?
+                  Set it once — it only changes when the design or the line&apos;s efficiency does.
+                </p>
+                <div className="mt-4 flex flex-wrap items-end gap-4">
+                  <div className="w-44">
+                    <p className={micro}>Standard Capacity</p>
+                    <div className="flex items-center gap-2">
+                      <input type="number" inputMode="decimal" step="any" value={capacityPairs}
+                        onChange={(e) => { setCapacityPairs(e.target.value); setMessage(null); }}
+                        placeholder="600" className={input} />
+                      <span className="whitespace-nowrap text-xs font-medium text-slate-500">pairs / month</span>
+                    </div>
+                  </div>
+                  <Derived label="Auto" value={`${result.standardCapacityDozen.toLocaleString()} dozen / month`} />
+                </div>
+                {result.standardCapacityPairs <= 0 && (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    Until a capacity is set, no factory cost is charged at all — better a visible zero than an invented number.
+                  </p>
+                )}
               </div>
+
+              {/* The pool, entered once and shared out */}
+              <details className="rounded-2xl border border-slate-200 bg-slate-50 p-5" open>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="text-sm font-bold text-slate-900">Monthly Factory Expenses</span>
+                  <span className="text-base font-bold tabular-nums text-slate-900">{taka(factory?.total_monthly ?? 0)}</span>
+                </summary>
+                <div className="mt-4 space-y-1">
+                  {(bySection.FACTORY ?? []).filter((f) => fieldIsFactoryMonthly(f as unknown as CostFieldLike)).map((f) => (
+                    <Stat key={f.id} label={f.label} value={taka(factory?.monthly?.[f.key] ?? 0)} />
+                  ))}
+                  <div className="mt-2 border-t border-slate-200 pt-2">
+                    <Stat label="Total Monthly Factory Cost" value={taka(factory?.total_monthly ?? 0)} strong />
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] text-slate-500">
+                  Shared by every product — edit them in{" "}
+                  <a href="/wholesale/factory-settings" className="font-semibold text-teal-700 hover:underline">Factory Cost Settings</a>.
+                  Change the salary bill once and every costing follows on its next save.
+                </p>
+              </details>
+
+              {/* The allocation, shown as arithmetic rather than a bare figure */}
+              <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700">Allocated to this design</p>
+                <p className="mt-1 text-xs tabular-nums text-teal-900">
+                  {taka(result.factoryMonthlyTotal)} ÷ {result.standardCapacityDozen.toLocaleString()} dozen
+                </p>
+                <div className="mt-3 border-t border-teal-300 pt-3">
+                  <Stat label="Factory &amp; Labour Cost / Dozen" value={taka(result.factoryAllocatedDozen)} strong accent />
+                  <Stat label="Factory &amp; Labour Cost / Pair" value={taka(result.factoryAllocatedPair)} strong accent />
+                </div>
+                <p className="mt-2 text-[11px] text-teal-800">
+                  A slower design yields fewer pairs from the same month of wages, so it carries more of them — which is exactly what it costs.
+                </p>
+              </div>
+
+              {savedFactoryTotal !== null && savedFactoryTotal !== (factory?.total_monthly ?? 0) && (
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                  This costing was last saved against a monthly pool of {taka(savedFactoryTotal)}. Saving now will reprice it
+                  against the current {taka(factory?.total_monthly ?? 0)}.
+                </p>
+              )}
+
+              {/* Product's own factory costs */}
+              <h3 className="text-sm font-semibold text-slate-800">This Product&apos;s Own Factory Costs (per dozen)</h3>
               {flatSection("FACTORY", result.factoryCostDozen)}
 
               <div className="mt-6 rounded-2xl border border-slate-900 bg-slate-900 px-5 py-4 text-white">

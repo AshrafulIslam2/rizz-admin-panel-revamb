@@ -29,6 +29,12 @@ export type CostField = {
   is_archived: boolean;
 };
 
+export type FactorySettings = {
+  /** fieldKey -> monthly amount, for FACTORY fields on a PER_MONTH basis. */
+  monthly: Record<string, number>;
+  total_monthly: number;
+};
+
 export type RetailSettings = {
   monthly: Record<string, number>;
   expected_monthly_sales_pairs: number;
@@ -50,7 +56,12 @@ export type ProductCosting = {
    * "__modes" key holds the handmade/ready-made choice per group.
    */
   values: Record<string, unknown>;
+  /** Pairs a month this design yields if the factory ran nothing else. */
+  standard_capacity_pairs: number;
+  /** The same capacity in dozens, derived on save. */
   monthly_production: number;
+  /** The shop-wide monthly factory pool this costing was priced against. */
+  factory_monthly_total: number;
   wholesale_profit_pct: number;
   retail_profit_pct: number;
   retail_common_cost_pair: number;
@@ -101,6 +112,11 @@ export const updateCostField = (id: string, dto: Partial<CostField>) =>
 export const reorderCostFields = (ids: string[]) =>
   call<{ ok: boolean }>("/costing/fields/reorder", "PATCH", { ids });
 export const archiveCostField = (id: string) => call<CostField>(`/costing/fields/${id}`, "DELETE");
+
+// ── Factory settings (shop-wide monthly bills) ──
+export const getFactorySettings = () => call<FactorySettings>("/costing/factory-settings");
+export const saveFactorySettings = (dto: { monthly: Record<string, number> }) =>
+  call<FactorySettings>("/costing/factory-settings", "PUT", dto);
 
 // ── Retail settings ──
 export const getRetailSettings = () => call<RetailSettings>("/costing/retail-settings");

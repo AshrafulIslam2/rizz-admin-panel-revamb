@@ -84,8 +84,17 @@ export type CostingInput = {
   /** fieldKey -> amount exactly as the admin typed it. */
   values: Record<string, unknown>;
   fields: CostFieldLike[];
-  /** Dozens produced per month — spreads PER_MONTH factory bills. */
-  monthlyProductionDozen?: number;
+  /**
+   * Pairs this design yields in a month if the factory ran nothing else.
+   *
+   * This is the divisor for every monthly bill, and it is deliberately
+   * per-product: a fiddly design ties up the same workers for fewer pairs, so
+   * it must carry a bigger share of the same salary bill. Set once as a
+   * standard, not re-entered each month.
+   */
+  standardCapacityPairs?: number;
+  /** Sum of the shop-wide monthly factory expenses (see calcFactoryMonthlyTotal). */
+  factoryMonthlyTotal?: number;
   wholesaleProfitPct?: number;
   retailProfitPct?: number;
   /** Comes from the shop-wide retail settings (see calcRetailCommonCostPerPair). */
@@ -95,6 +104,17 @@ export type CostingInput = {
 export type CostingResult = {
   upperCostDozen: number;
   soleCostDozen: number;
+
+  standardCapacityPairs: number;
+  standardCapacityDozen: number;
+  /** The shop-wide monthly pool this product was costed against. */
+  factoryMonthlyTotal: number;
+  /** This product's share of that pool. */
+  factoryAllocatedDozen: number;
+  factoryAllocatedPair: number;
+  /** Factory costs entered against this product itself (packaging, transport). */
+  factoryProductCostDozen: number;
+  /** Allocated share + product-specific factory costs. */
   factoryCostDozen: number;
   productionCostDozen: number;
   productionCostPair: number;
@@ -220,15 +240,15 @@ export function fieldIsInActiveMode(f: CostFieldLike, modes: Record<string, stri
 /**
  * Convert one field's typed amount into a per-dozen figure.
  *
- * PER_MONTH divided by zero monthly output yields 0 rather than Infinity —
- * an admin who has not filled in monthly production yet should see a harmless
- * zero, not a broken total.
+ * PER_MONTH divided by zero capacity yields 0 rather than Infinity — an admin
+ * who has not filled in the capacity yet should see a harmless zero, not a
+ * broken total.
  */
-function toPerDozen(amount: number, basis: CostBasisKey, monthlyProductionDozen: number): number {
+function toPerDozen(amount: number, basis: CostBasisKey, capacityDozen: number): number {
   if (basis === 'PER_DOZEN') return amount;
   if (basis === 'PER_PAIR') return amount * PAIRS_PER_DOZEN;
   if (basis === 'PER_MONTH') {
-    return monthlyProductionDozen > 0 ? amount / monthlyProductionDozen : 0;
+    return capacityDozen > 0 ? amount / capacityDozen : 0;
   }
   return amount;
 }
@@ -266,16 +286,71 @@ export function calcRetailCommonCostPerPair(
   };
 }
 
+/**
+ * A FACTORY field is a shop-wide monthly bill, not a per-product entry.
+ *
+ * The salary bill does not change because one design is being cut, so it is
+ * entered once in Factory Cost Settings and shared out by capacity instead.
+ * Anything else in FACTORY (packaging, transport) stays with the product.
+ */
+export function fieldIsFactoryMonthly(f: CostFieldLike): boolean {
+  return f.section === 'FACTORY' && f.basis === 'PER_MONTH';
+}
+
+/**
+ * Shop-wide monthly factory expenses: salary, rent, electricity, snacks and
+ * the rest, added up exactly as entered.
+ */
+export function calcFactoryMonthlyTotal(
+  monthlyValues: Record<string, unknown>,
+  fields: CostFieldLike[],
+): number {
+  let total = 0;
+  for (const f of fields) {
+    if (!fieldIsFactoryMonthly(f) || !usable(f)) continue;
+    total += num(monthlyValues[f.key]);
+  }
+  return money(total);
+}
+
+/**
+ * Share the monthly factory pool out to one design.
+ *
+ *   Total monthly factory cost ÷ that design's standard monthly capacity
+ *
+ * A design that yields 300 pairs a month carries twice the overhead per pair
+ * of one that yields 600 — which is the whole point: slow, difficult work
+ * costs more to make.
+ */
+export function calcFactoryAllocation(
+  factoryMonthlyTotal: unknown,
+  standardCapacityPairs: unknown,
+): { capacityPairs: number; capacityDozen: number; perDozen: number; perPair: number } {
+  const total = num(factoryMonthlyTotal);
+  const capacityPairs = num(standardCapacityPairs);
+  const capacityDozen = capacityPairs / PAIRS_PER_DOZEN;
+
+  return {
+    capacityPairs,
+    capacityDozen: money(capacityDozen),
+    perDozen: capacityDozen > 0 ? money(total / capacityDozen) : 0,
+    perPair: capacityPairs > 0 ? money(total / capacityPairs) : 0,
+  };
+}
+
 export function calcCosting(input: CostingInput): CostingResult {
   const values = input.values ?? {};
   const fields = input.fields ?? [];
-  const monthlyProductionDozen = num(input.monthlyProductionDozen);
+
+  // Every monthly bill is divided by this design's own standard capacity.
+  const allocation = calcFactoryAllocation(input.factoryMonthlyTotal, input.standardCapacityPairs);
+  const capacityDozen = allocation.capacityDozen;
 
   const modes = getModes(values as Record<string, unknown>);
 
   let upperCostDozen = 0;
   let soleCostDozen = 0;
-  let factoryCostDozen = 0;
+  let factoryProductCostDozen = 0;
   let retailProductCostPair = 0;
 
   for (const f of fields) {
@@ -283,6 +358,8 @@ export function calcCosting(input: CostingInput): CostingResult {
     // Skip rows belonging to the mode the admin is not using (e.g. the
     // handmade insole materials while Ready Made is selected).
     if (!fieldIsInActiveMode(f, modes)) continue;
+    // Monthly factory bills live in Factory Cost Settings, not on the product.
+    if (fieldIsFactoryMonthly(f)) continue;
 
     // SHEET already returns a per-dozen figure, so it must not be scaled
     // again by the basis conversion below.
@@ -294,13 +371,15 @@ export function calcCosting(input: CostingInput): CostingResult {
 
     switch (f.section) {
       case 'UPPER':
-        upperCostDozen += toPerDozen(amount, basisForField, monthlyProductionDozen);
+        upperCostDozen += toPerDozen(amount, basisForField, capacityDozen);
         break;
       case 'SOLE':
-        soleCostDozen += toPerDozen(amount, basisForField, monthlyProductionDozen);
+        soleCostDozen += toPerDozen(amount, basisForField, capacityDozen);
         break;
       case 'FACTORY':
-        factoryCostDozen += toPerDozen(amount, basisForField, monthlyProductionDozen);
+        // Only the product's own factory costs reach here — packaging,
+        // transport and anything else priced per dozen or per pair.
+        factoryProductCostDozen += toPerDozen(amount, basisForField, capacityDozen);
         break;
       case 'RETAIL_PRODUCT':
         retailProductCostPair += toPerPair(amount, basisForField);
@@ -310,6 +389,10 @@ export function calcCosting(input: CostingInput): CostingResult {
         break;
     }
   }
+
+  // The design's share of the monthly pool, plus what it costs the factory
+  // on its own account.
+  const factoryCostDozen = allocation.perDozen + factoryProductCostDozen;
 
   const productionCostDozen = upperCostDozen + soleCostDozen + factoryCostDozen;
   const productionCostPair = productionCostDozen / PAIRS_PER_DOZEN;
@@ -329,6 +412,13 @@ export function calcCosting(input: CostingInput): CostingResult {
   return {
     upperCostDozen: money(upperCostDozen),
     soleCostDozen: money(soleCostDozen),
+
+    standardCapacityPairs: allocation.capacityPairs,
+    standardCapacityDozen: allocation.capacityDozen,
+    factoryMonthlyTotal: money(num(input.factoryMonthlyTotal)),
+    factoryAllocatedDozen: allocation.perDozen,
+    factoryAllocatedPair: allocation.perPair,
+    factoryProductCostDozen: money(factoryProductCostDozen),
     factoryCostDozen: money(factoryCostDozen),
     productionCostDozen: money(productionCostDozen),
     productionCostPair: money(productionCostPair),

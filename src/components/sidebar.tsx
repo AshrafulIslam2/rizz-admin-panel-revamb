@@ -27,6 +27,7 @@ const NAV = [
     section: "Wholesale",
     items: [
       { label: "Production", href: "/wholesale/production", icon: "⚒" },
+      { label: "Factory Cost Settings", href: "/wholesale/factory-settings", icon: "⌂" },
       { label: "Retail Cost Settings", href: "/wholesale/retail-settings", icon: "◱" },
       { label: "Cost Fields", href: "/wholesale/cost-fields", icon: "☰" },
     ],
