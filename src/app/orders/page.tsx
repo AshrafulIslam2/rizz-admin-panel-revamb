@@ -2,18 +2,49 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import {
+  ORDER_STATUSES,
+  ORDER_STATUS_LABEL,
+  PAYMENT_STATUS_LABEL,
+  paymentStatusOf,
+  statusOf,
+} from "@/lib/order-status";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 
-const STATUSES = ["all", "pending", "confirmed", "dispatched", "delivered", "cancelled"];
+/** "all" plus every real status, in lifecycle order. */
+const STATUSES = ["all", ...ORDER_STATUSES];
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-200",
+  verification_required: "bg-orange-50 text-orange-700 border-orange-200",
   confirmed: "bg-blue-50 text-blue-700 border-blue-200",
-  dispatched: "bg-purple-50 text-purple-700 border-purple-200",
+  processing: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  shipped: "bg-purple-50 text-purple-700 border-purple-200",
   delivered: "bg-emerald-50 text-emerald-700 border-emerald-200",
   cancelled: "bg-rose-50 text-rose-700 border-rose-200",
+  fake: "bg-red-100 text-red-800 border-red-300",
+  duplicate: "bg-stone-100 text-stone-700 border-stone-300",
+  returned: "bg-yellow-50 text-yellow-800 border-yellow-200",
+  refunded: "bg-pink-50 text-pink-700 border-pink-200",
+  failed: "bg-slate-100 text-slate-600 border-slate-300",
+  test: "bg-slate-100 text-slate-500 border-slate-300",
 };
+
+const FILTER_LABEL: Record<string, string> = { all: "All", ...ORDER_STATUS_LABEL };
+
+const PAYMENT_COLORS: Record<string, string> = {
+  unpaid: "bg-slate-100 text-slate-600 border-slate-300",
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  partially_paid: "bg-yellow-50 text-yellow-800 border-yellow-200",
+  refunded: "bg-pink-50 text-pink-700 border-pink-200",
+  partially_refunded: "bg-pink-50 text-pink-700 border-pink-200",
+  failed: "bg-rose-50 text-rose-700 border-rose-200",
+};
+
+/** Void statuses are dimmed so the eye skips them when scanning for real work. */
+const VOID = ["fake", "duplicate", "test", "failed"];
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -40,14 +71,18 @@ export default function OrdersPage() {
 
   useEffect(() => {
     let list = orders;
-    if (activeStatus !== "all") list = list.filter((o) => o.status === activeStatus);
+    if (activeStatus !== "all") list = list.filter((o) => statusOf(o.status) === activeStatus);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
         (o) =>
           String(o.order_number ?? o.id).toLowerCase().includes(q) ||
           (o.customer_name ?? "").toLowerCase().includes(q) ||
-          (o.customer_phone ?? "").includes(q),
+          (o.customer_phone ?? "").includes(q) ||
+          (o.tracking_id ?? "").toLowerCase().includes(q) ||
+          (Array.isArray(o.items) ? o.items : []).some((it: any) =>
+            String(it?.name ?? it?.slug ?? "").toLowerCase().includes(q),
+          ),
       );
     }
     setFiltered(list);
@@ -55,7 +90,7 @@ export default function OrdersPage() {
 
   const counts: Record<string, number> = { all: orders.length };
   STATUSES.slice(1).forEach((s) => {
-    counts[s] = orders.filter((o) => o.status === s).length;
+    counts[s] = orders.filter((o) => statusOf(o.status) === s).length;
   });
 
   return (
@@ -80,13 +115,16 @@ export default function OrdersPage() {
               <button
                 key={s}
                 onClick={() => setActiveStatus(s)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition ${
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   activeStatus === s
                     ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                    : counts[s] > 0
+                      ? "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      : "border-slate-100 bg-white text-slate-300 hover:border-slate-200"
                 }`}
               >
-                {s} {counts[s] > 0 && <span className="ml-1 opacity-60">{counts[s]}</span>}
+                {FILTER_LABEL[s] ?? s}
+                {counts[s] > 0 && <span className="ml-1 opacity-60">{counts[s]}</span>}
               </button>
             ))}
           </div>
@@ -117,7 +155,7 @@ export default function OrdersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  {["Order", "Customer", "Items", "Total", "Status", "Date", ""].map((h) => (
+                  {["Order", "Customer", "Items", "Total", "Payment", "Status", "Date", ""].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
                       {h}
                     </th>
@@ -126,17 +164,27 @@ export default function OrdersPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((order: any) => (
-                  <tr key={order.id} className="hover:bg-slate-50 transition">
+                  <tr key={order.id} className={`transition hover:bg-slate-50 ${VOID.includes(statusOf(order.status)) ? "opacity-55" : ""}`}>
                     <td className="px-4 py-3 font-medium text-slate-900">#{order.order_number ?? order.id}</td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{order.customer_name ?? "—"}</p>
                       <p className="text-xs text-slate-500">{order.customer_phone ?? ""}</p>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{(order.items ?? []).length} item(s)</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">৳{(order.total ?? 0).toLocaleString()}</td>
+                    <td className={`px-4 py-3 font-semibold ${VOID.includes(statusOf(order.status)) ? "text-slate-400 line-through" : "text-slate-900"}`}>
+                      ৳{(order.total ?? 0).toLocaleString()}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${STATUS_COLORS[order.status] ?? "bg-slate-50 text-slate-600 border-slate-200"}`}>
-                        {order.status ?? "—"}
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${PAYMENT_COLORS[paymentStatusOf(order.payment_status)] ?? "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                        {PAYMENT_STATUS_LABEL[paymentStatusOf(order.payment_status)]}
+                      </span>
+                      {Number(order.amount_paid) > 0 && Number(order.amount_paid) < Number(order.total) && (
+                        <p className="mt-0.5 text-[10px] text-slate-500">৳{Number(order.amount_paid).toLocaleString()} in</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase ${STATUS_COLORS[statusOf(order.status)] ?? "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                        {ORDER_STATUS_LABEL[statusOf(order.status)] ?? "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-500 text-xs">

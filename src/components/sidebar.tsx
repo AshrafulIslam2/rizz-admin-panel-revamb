@@ -14,6 +14,7 @@ const NAV = [
     section: "Commerce",
     items: [
       { label: "Orders", href: "/orders", icon: "◫" },
+      { label: "Fake Order History", href: "/orders/fraud", icon: "⚠" },
       { label: "Checkout Leads", href: "/checkout-leads", icon: "☏" },
       { label: "Delivery", href: "/delivery", icon: "▣" },
       { label: "Products", href: "/products", icon: "◻" },
@@ -38,6 +39,7 @@ const NAV = [
       { label: "POS Terminal", href: "/pos", icon: "⊟" },
       { label: "Shop Statistics", href: "/shop-statistics", icon: "▦" },
       { label: "Inventory", href: "/inventory", icon: "⊞" },
+      { label: "Stock Reconciliation", href: "/inventory/reconcile", icon: "⇄" },
       { label: "Suppliers", href: "/suppliers", icon: "◩" },
       { label: "Purchase Orders", href: "/purchases", icon: "◪" },
       { label: "Returns & Exchange", href: "/returns", icon: "↩" },
