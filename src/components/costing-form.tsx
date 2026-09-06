@@ -31,6 +31,7 @@ import {
   type CostEntry,
   type CostFieldLike,
 } from "@/lib/costing-calc";
+import DuplicateCostingDialog from "@/components/duplicate-costing-dialog";
 
 /**
  * The product costing form — one component for both Add and Edit.
@@ -267,6 +268,7 @@ export default function CostingForm({ costingId }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showCopy, setShowCopy] = useState(false);
 
   // Product identity
   const [product, setProduct] = useState({
@@ -669,6 +671,14 @@ export default function CostingForm({ costingId }: Props) {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      {showCopy && costingId && (
+        <DuplicateCostingDialog
+          costingId={costingId}
+          sourceName={product.product_name}
+          sourceCode={product.product_code}
+          onClose={() => setShowCopy(false)}
+        />
+      )}
       <div className="min-w-0">
         {/* Tabs */}
         <div className="mb-6 flex flex-wrap gap-2">
@@ -989,10 +999,34 @@ export default function CostingForm({ costingId }: Props) {
             <Stat label="Retail Price / Pair" value={taka(result.retailPricePair)} strong accent />
 
             {isEdit && (
-              <button type="button" onClick={save} disabled={saving}
-                className="mt-4 w-full rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-500 disabled:opacity-50">
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
+              <>
+                <button type="button" onClick={save} disabled={saving}
+                  className="mt-4 w-full rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-teal-500 disabled:opacity-50">
+                  {saving ? "Saving…" : "Save Changes"}
+                </button>
+
+                {/* Copying reads the SAVED record, so unsaved edits would be
+                    left behind — better to say so than to copy silently. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (touched.current.size > 0) {
+                      setMessage(null);
+                      setError("Save your changes first — a copy is made from the saved costing, so unsaved edits would not come across.");
+                      return;
+                    }
+                    setError(null);
+                    setShowCopy(true);
+                  }}
+                  disabled={saving}
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Copy to a new product
+                </button>
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Reuses every material and price on a new design — change only what differs.
+                </p>
+              </>
             )}
           </div>
         </details>

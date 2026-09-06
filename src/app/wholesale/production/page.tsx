@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductCosting, deleteCosting, listCostings, taka } from "@/lib/costing-api";
+import DuplicateCostingDialog from "@/components/duplicate-costing-dialog";
 
 export default function ProductionListPage() {
   const [rows, setRows] = useState<ProductCosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /** The row being copied, if the copy dialog is open. */
+  const [copying, setCopying] = useState<ProductCosting | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -37,6 +40,14 @@ export default function ProductionListPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      {copying && (
+        <DuplicateCostingDialog
+          costingId={copying.id}
+          sourceName={copying.product_name}
+          sourceCode={copying.product_code}
+          onClose={() => setCopying(null)}
+        />
+      )}
       <div className="mx-auto max-w-[1500px] space-y-6">
         <header className="rounded-[32px] bg-slate-950 px-6 py-5 text-white">
           <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-teal-400">Wholesale</p>
@@ -118,6 +129,13 @@ export default function ProductionListPage() {
                     <td className="px-4 py-3 text-[11px] text-slate-400">{new Date(r.updated_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
                       <Link href={`/wholesale/production/${r.id}/edit`} className="rounded-lg px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-50">Edit</Link>
+                      <button
+                        onClick={() => setCopying(r)}
+                        title="Copy this costing onto a new product"
+                        className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                      >
+                        Copy
+                      </button>
                       <button onClick={() => remove(r)} className="rounded-lg px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50">Delete</button>
                     </td>
                   </tr>

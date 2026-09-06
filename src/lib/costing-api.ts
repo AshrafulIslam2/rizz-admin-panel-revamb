@@ -132,6 +132,15 @@ export const updateCosting = (id: string, dto: Record<string, unknown>) =>
   call<ProductCosting>(`/costing/products/${id}`, "PATCH", dto);
 export const deleteCosting = (id: string) => call<ProductCosting>(`/costing/products/${id}`, "DELETE");
 
+/**
+ * Copy an existing costing onto a new product.
+ *
+ * Every material, calculator row and profit percentage comes across; the
+ * catalog link deliberately does not, because this is a different product.
+ */
+export const duplicateCosting = (id: string, dto: { product_name: string; product_code?: string | null }) =>
+  call<ProductCosting>(`/costing/products/${id}/duplicate`, "POST", dto);
+
 export type CatalogProduct = {
   id: string;
   name: string;
