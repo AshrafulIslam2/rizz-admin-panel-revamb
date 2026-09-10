@@ -9,7 +9,7 @@ type Product = {
   price?: number
   stock_qty?: number
   media?: { media_url: string; is_primary: boolean }[]
-  variants?: { price: number; sale_price?: number | null; stock_qty?: number }[]
+  variants?: { price: number; sale_price?: number | null; stock_qty?: number; reserved_qty?: number }[]
 }
 
 const LOW_STOCK_THRESHOLD = 6
@@ -21,11 +21,27 @@ function cardPrice(p: Product): number {
   return p.price ?? 0
 }
 
+/**
+ * What can actually still be sold: stock on the shelf minus units already
+ * held by confirmed or shipped orders.
+ *
+ * Raw stock_qty is the wrong number to headline — a variant showing 2 with
+ * both pairs reserved is out of stock for the next customer.
+ */
 function totalStock(p: Product): number {
   if (p.variants && p.variants.length > 0) {
-    return p.variants.reduce((sum, v) => sum + (v.stock_qty ?? 0), 0)
+    return p.variants.reduce(
+      (sum, v) => sum + Math.max(0, (v.stock_qty ?? 0) - (v.reserved_qty ?? 0)),
+      0,
+    )
   }
   return p.stock_qty ?? 0
+}
+
+/** Units spoken for but not yet dispatched off the books. */
+function totalReserved(p: Product): number {
+  if (!p.variants || p.variants.length === 0) return 0
+  return p.variants.reduce((sum, v) => sum + (v.reserved_qty ?? 0), 0)
 }
 
 function cardImage(p: Product): string | null {
@@ -83,6 +99,7 @@ export default async function ProductsPage() {
             const img = cardImage(p)
             const price = cardPrice(p)
             const stock = totalStock(p)
+            const reserved = totalReserved(p)
             const isLowStock = stock <= LOW_STOCK_THRESHOLD
             return (
               <div key={p.id} className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition">
@@ -103,7 +120,7 @@ export default async function ProductsPage() {
                         <span className="rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1">Live</span>
                         {isLowStock && (
                           <span className="rounded-full bg-red-50 text-red-700 text-xs font-semibold px-3 py-1">
-                            Low Stock ({stock})
+                            Low Stock ({stock}{reserved > 0 ? ` · ${reserved} reserved` : ""})
                           </span>
                         )}
                       </div>

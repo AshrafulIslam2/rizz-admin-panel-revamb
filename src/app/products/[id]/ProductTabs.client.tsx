@@ -768,7 +768,7 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>{["Size", "Color", "Price (৳)", "Sale Price (৳)", "Production Cost (৳)", "Stock", ""].map((h) => (
+              <tr>{["Size", "Color", "Price (৳)", "Sale Price (৳)", "Production Cost (৳)", "Stock", "Reserved", "Available", ""].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
               ))}</tr>
             </thead>
@@ -831,7 +831,39 @@ function VariantsTab({ productId, productName }: { productId: string; productNam
                         value={rowEdit.stock_qty}
                         onChange={(e) => setEdits((ed) => ({ ...ed, [id]: { ...rowEdit, stock_qty: e.target.value } }))}
                         className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-teal-400"
+                        title="Physical units on the shelf, including any already spoken for"
                       />
+                    </td>
+                    {/* Reserved and Available are derived, never typed. Stock alone
+                        is misleading once orders start holding pairs. */}
+                    <td className="px-4 py-2.5">
+                      <span
+                        className={`tabular-nums text-sm font-semibold ${(v.reserved_qty ?? 0) > 0 ? "text-amber-700" : "text-slate-300"}`}
+                        title="Held by confirmed or shipped orders — still on the shelf, but sold"
+                      >
+                        {v.reserved_qty ?? 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {(() => {
+                        // NOT floored at zero on purpose. If two customers took
+                        // the last pair before anyone noticed, the shop needs to
+                        // see −1 and ring one of them, not a tidy 0.
+                        const available = (Number(v.stock_qty ?? 0)) - (Number(v.reserved_qty ?? 0));
+                        return (
+                          <span
+                            className={`tabular-nums text-sm font-bold ${available < 0 ? "text-red-700" : available === 0 ? "text-rose-600" : "text-slate-900"}`}
+                            title={
+                              available < 0
+                                ? "Oversold — more units are reserved than are on the shelf"
+                                : "Stock minus reserved — what you can actually still sell"
+                            }
+                          >
+                            {available}
+                            {available < 0 && <span className="ml-1 text-[10px] font-semibold uppercase">oversold</span>}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       {dirty && (
@@ -1092,7 +1124,11 @@ function SeoTab({
 // ─── Images ──────────────────────────────────────────────────────────────────
 
 function ImagesTab({ productId }: { productId: string }) {
-  const [images, setImages] = useState<{ id: string; url: string; is_primary: boolean; alt?: string }[]>([]);
+  const [images, setImages] = useState<{ id: string; url: string; is_primary: boolean; alt?: string; color?: string | null }[]>([]);
+  /** Colour names taken from this product's own variants — no free typing, so a
+   *  tag can never drift from the colour the storefront actually offers. */
+  const [colors, setColors] = useState<string[]>([]);
+  const [newColor, setNewColor] = useState("");
   const [url, setUrl] = useState("");
   const [alt, setAlt] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -1105,10 +1141,34 @@ function ImagesTab({ productId }: { productId: string }) {
       .then((r) => r.ok ? r.json() : [])
       .then((d) => {
         const list = Array.isArray(d) ? d : d?.media ?? d?.images ?? [];
-        setImages(list.map((m: any) => ({ id: m.id, url: m.media_url ?? m.url ?? m.image_url, is_primary: m.is_primary ?? false, alt: m.alt_text ?? m.alt })));
+        setImages(list.map((m: any) => ({ id: m.id, url: m.media_url ?? m.url ?? m.image_url, is_primary: m.is_primary ?? false, alt: m.alt_text ?? m.alt, color: m.color ?? null })));
+      })
+      .catch(() => {});
+
+    // The dropdown offers exactly the colours this product has variants for.
+    fetch(`${API}/products/${productId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => {
+        const list: string[] = Array.from(new Set(
+          (p?.variants ?? [])
+            .map((v: any) => String(v.attributes?.color ?? v.color ?? "").trim())
+            .filter(Boolean),
+        ));
+        setColors(list.sort());
       })
       .catch(() => {});
   }, [productId]);
+
+  /** Tag (or untag) one image with a colourway. */
+  async function setImageColor(id: string, color: string) {
+    setImages((imgs) => imgs.map((i) => (i.id === id ? { ...i, color: color || null } : i)));
+    try {
+      await api(`/products/${productId}/media/${id}`, "PATCH", { color });
+      setMsg({ text: color ? `Tagged as ${color}.` : "Colour tag removed — shows for every colour.", ok: true });
+    } catch {
+      setMsg({ text: "Could not save the colour tag.", ok: false });
+    }
+  }
 
   async function addImage() {
     if (!url.trim()) { setMsg({ text: "URL is required.", ok: false }); return; }
@@ -1118,8 +1178,9 @@ function ImagesTab({ productId }: { productId: string }) {
         media_url: url,
         alt_text: alt || undefined,
         media_type: "IMAGE",
+        color: newColor || undefined,
       });
-      setImages((imgs) => [...imgs, { id: created.id, url: created.media_url, is_primary: created.is_primary ?? false, alt: created.alt_text }]);
+      setImages((imgs) => [...imgs, { id: created.id, url: created.media_url, is_primary: created.is_primary ?? false, alt: created.alt_text, color: created.color ?? null }]);
       setUrl(""); setAlt("");
       setMsg({ text: "Image added.", ok: true });
     } catch {
@@ -1132,7 +1193,12 @@ function ImagesTab({ productId }: { productId: string }) {
     setUploading(true); setMsg(null);
     try {
       const created = await uploadFile(`/products/${productId}/media/upload`, file, { alt_text: alt });
-      setImages((imgs) => [...imgs, { id: created.id, url: created.media_url, is_primary: created.is_primary ?? false, alt: created.alt_text }]);
+      // The upload endpoint takes the file only, so the colour is tagged right
+      // after — one extra call, but it keeps the upload path untouched.
+      if (newColor) {
+        try { await api(`/products/${productId}/media/${created.id}`, "PATCH", { color: newColor }); } catch { /* tag can be set on the card */ }
+      }
+      setImages((imgs) => [...imgs, { id: created.id, url: created.media_url, is_primary: created.is_primary ?? false, alt: created.alt_text, color: newColor || null }]);
       setFile(null); setAlt("");
       setMsg({ text: "Image uploaded.", ok: true });
     } catch {
@@ -1166,11 +1232,27 @@ function ImagesTab({ productId }: { productId: string }) {
               {img.is_primary && (
                 <div className="absolute top-2 left-2 rounded-full bg-teal-500 px-2 py-0.5 text-[10px] font-bold text-white">PRIMARY</div>
               )}
-              <div className="flex gap-1 p-1.5 bg-white border-t border-slate-200">
-                {!img.is_primary && (
-                  <button onClick={() => setPrimary(img.id)} className="flex-1 rounded-lg bg-slate-100 py-1 text-[11px] font-medium hover:bg-teal-50">Set Primary</button>
-                )}
-                <button onClick={() => deleteImage(img.id)} className="flex-1 rounded-lg bg-rose-50 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-100">Delete</button>
+              {img.color && (
+                <div className="absolute top-2 right-2 rounded-full bg-slate-900/85 px-2 py-0.5 text-[10px] font-bold text-white">{img.color}</div>
+              )}
+              <div className="bg-white border-t border-slate-200 p-1.5 space-y-1.5">
+                {/* Which colourway this photo shows. The storefront switches the
+                    gallery to it when the customer picks that colour. */}
+                <select
+                  value={img.color ?? ""}
+                  onChange={(e) => setImageColor(img.id, e.target.value)}
+                  className={`w-full rounded-lg border px-2 py-1 text-[11px] outline-none ${img.color ? "border-slate-900 font-semibold text-slate-900" : "border-slate-200 text-slate-500"}`}
+                  title="Tag this image to a colour so it shows when that colour is selected"
+                >
+                  <option value="">Every colour</option>
+                  {colors.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <div className="flex gap-1">
+                  {!img.is_primary && (
+                    <button onClick={() => setPrimary(img.id)} className="flex-1 rounded-lg bg-slate-100 py-1 text-[11px] font-medium hover:bg-teal-50">Set Primary</button>
+                  )}
+                  <button onClick={() => deleteImage(img.id)} className="flex-1 rounded-lg bg-rose-50 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-100">Delete</button>
+                </div>
               </div>
             </div>
           ))}
@@ -1190,6 +1272,18 @@ function ImagesTab({ productId }: { productId: string }) {
         <div>
           <p className={lbl}>Alt Text</p>
           <input value={alt} onChange={(e) => setAlt(e.target.value)} placeholder="Men's tan loafer side view" className={field} />
+        </div>
+        <div>
+          <p className={lbl}>Colour</p>
+          <select value={newColor} onChange={(e) => setNewColor(e.target.value)} className={field}>
+            <option value="">Every colour (no tag)</option>
+            {colors.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {colors.length === 0
+              ? "Add variants with colours first, then images can be tagged to them."
+              : "Tagged images show on the storefront when that colour is selected. Untagged ones always show."}
+          </p>
         </div>
         <button onClick={uploadImage} disabled={uploading || !file} className="rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
           {uploading ? "Uploading…" : "↑ Upload Image"}

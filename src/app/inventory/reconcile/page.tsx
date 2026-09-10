@@ -48,6 +48,7 @@ export default function StockReconcilePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [resyncing, setResyncing] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -87,6 +88,34 @@ export default function StockReconcilePage() {
       setMsg({ type: "err", text: e?.message ?? "Failed." });
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Re-apply the stock policy to every order.
+   *
+   * Unlike the reconciliation above this is safe to run any time: each order
+   * moves by the difference between what it holds and what its status says it
+   * should, so one already in step is skipped.
+   */
+  async function resync() {
+    setResyncing(true); setMsg(null);
+    try {
+      const r = await fetch(`${API}/orders/stock/resync`, { method: "POST" });
+      const text = await r.text();
+      if (!r.ok) throw new Error(String(text).slice(0, 300));
+      const out = JSON.parse(text);
+      setMsg({
+        type: "ok",
+        text: out.changed === 0
+          ? `Checked ${out.checked} orders — every one already holds the right stock.`
+          : `Brought ${out.changed} of ${out.checked} orders into line: ${out.details.map((d: any) => `${d.order} (${d.from}→${d.to})`).join(", ")}.`,
+      });
+      await load();
+    } catch (e: any) {
+      setMsg({ type: "err", text: e?.message ?? "Resync failed." });
+    } finally {
+      setResyncing(false);
     }
   }
 
@@ -210,6 +239,26 @@ export default function StockReconcilePage() {
                 </div>
               </div>
             )}
+
+            <div className={card}>
+              <p className="text-sm font-bold text-slate-900">Re-apply the stock policy</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Orders placed before a policy change can be holding the wrong thing — for example an order placed
+                back when stock was only reserved on confirmation. This walks every order and moves it by the
+                difference, so anything already correct is left alone.
+              </p>
+              <button
+                type="button"
+                onClick={resync}
+                disabled={resyncing}
+                className="mt-3 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {resyncing ? "Checking…" : "Resync order stock"}
+              </button>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Safe to run more than once — it is a diff, not an instruction.
+              </p>
+            </div>
 
             {!audit.already_run && audit.rows.length > 0 && (
               <div className={`${card} border-2 border-amber-300`}>
