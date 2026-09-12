@@ -70,6 +70,47 @@ function Badge({ text, className }: { text: string; className: string }) {
   );
 }
 
+/**
+ * Copy one field to the clipboard.
+ *
+ * Every one of these is a detail somebody has to retype into a courier form,
+ * so the tick confirming the copy matters more than it looks — without it you
+ * cannot tell a successful copy from a dead button.
+ */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [done, setDone] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      type="button"
+      title={`Copy ${label}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          // Clipboard API needs a secure context; fall back to a hidden field
+          // so this still works when the panel is served over plain http.
+          const el = document.createElement("textarea");
+          el.value = text;
+          el.style.position = "fixed";
+          el.style.opacity = "0";
+          document.body.appendChild(el);
+          el.select();
+          try { document.execCommand("copy"); } catch { /* nothing more to try */ }
+          document.body.removeChild(el);
+        }
+        setDone(true);
+        setTimeout(() => setDone(false), 1400);
+      }}
+      className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition ${
+        done ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+      }`}
+    >
+      {done ? "✓ Copied" : "Copy"}
+    </button>
+  );
+}
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
@@ -96,6 +137,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [verifyMethod, setVerifyMethod] = useState<string>(VERIFICATION_METHODS[0]);
   const [verifyNote, setVerifyNote] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  const [deliveryCharge, setDeliveryCharge] = useState("");
   const [courier, setCourier] = useState("");
   const [tracking, setTracking] = useState("");
   const [internalNote, setInternalNote] = useState("");
@@ -186,6 +228,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const total = Number(order.total) || 0;
   const paid = Number(order.amount_paid) || 0;
   const outstanding = Math.max(0, total - paid);
+  const courierKept = Number(order.delivery_charge_paid) || 0;
+  // What pressing the button would save right now.
+  const collectNow = payAmount === "" ? outstanding : (Number(payAmount) || 0);
+  const chargeNow = Number(deliveryCharge) || 0;
+  const fullAddress = [order.address, order.area, order.district, order.division].filter(Boolean).join(", ");
   const returnState = returnStatusOf(order.return_status);
   // Only the transitions the server would accept are offered.
   const RETURN_NEXT: Record<string, string[]> = {
@@ -360,13 +407,36 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="space-y-5">
             {/* Customer */}
             <div className={card}>
-              <p className={lbl}>Customer</p>
-              <p className="text-base font-semibold text-slate-900">{order.customer_name}</p>
-              <p className="text-sm text-slate-600">{order.customer_phone}</p>
-              {order.customer_email && <p className="text-sm text-slate-600">{order.customer_email}</p>}
-              <p className="mt-2 text-sm text-slate-600">
-                {[order.address, order.area, order.district, order.division].filter(Boolean).join(", ")}
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className={`${lbl} mb-0`}>Customer</p>
+                <CopyButton
+                  label="all details"
+                  text={[
+                    order.customer_name,
+                    order.customer_phone,
+                    fullAddress,
+                  ].filter(Boolean).join("\n")}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 py-0.5">
+                <p className="text-base font-semibold text-slate-900">{order.customer_name}</p>
+                <CopyButton label="name" text={order.customer_name ?? ""} />
+              </div>
+              <div className="flex items-center justify-between gap-3 py-0.5">
+                <p className="text-sm tabular-nums text-slate-600">{order.customer_phone}</p>
+                <CopyButton label="phone" text={order.customer_phone ?? ""} />
+              </div>
+              {order.customer_email && (
+                <div className="flex items-center justify-between gap-3 py-0.5">
+                  <p className="text-sm text-slate-600">{order.customer_email}</p>
+                  <CopyButton label="email" text={order.customer_email} />
+                </div>
+              )}
+              <div className="mt-2 flex items-start justify-between gap-3">
+                <p className="text-sm text-slate-600">{fullAddress}</p>
+                <CopyButton label="address" text={fullAddress} />
+              </div>
             </div>
 
             {/* Items */}
@@ -374,8 +444,22 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <p className={lbl}>Items</p>
               <div className="divide-y divide-slate-100">
                 {items.map((it, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    {/* The server picks the picture for this line's colour where
+                        one is tagged, so a black pair looks like a black pair. */}
+                    {it.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={it.image}
+                        alt={it.name ?? it.slug ?? "product"}
+                        className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-200 text-[10px] text-slate-300">
+                        no image
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{it.name ?? it.slug}</p>
                       <p className="text-xs text-slate-500">
                         {[it.size && `Size ${it.size}`, it.color].filter(Boolean).join(" · ")} × {it.quantity ?? 1}
@@ -435,25 +519,57 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <p className={lbl}>Payment</p>
               <Row label="Method" value={order.payment_method ?? "COD"} />
               <Row label="Status" value={PAYMENT_STATUS_LABEL[payment]} />
-              <Row label="Collected" value={taka(paid)} />
+              <Row label="Collected from customer" value={taka(paid)} />
+              {courierKept > 0 && (
+                <Row label="Courier delivery charge" value={<span className="text-amber-700">− {taka(courierKept)}</span>} />
+              )}
+              {courierKept > 0 && (
+                <Row label="Net received" value={<span className="font-bold text-emerald-700">{taka(paid - courierKept)}</span>} />
+              )}
               <Row label="Outstanding" value={<span className={outstanding > 0 ? "text-amber-700" : ""}>{taka(outstanding)}</span>} />
               {order.paid_at && <Row label="Paid at" value={dt(order.paid_at)} />}
 
               {outstanding > 0 && (
                 <div className="mt-3 border-t border-slate-100 pt-3">
                   <p className={lbl}>Record payment collected</p>
-                  <div className="flex gap-2">
-                    <input type="number" inputMode="decimal" step="any" value={payAmount}
-                      onChange={(e) => setPayAmount(e.target.value)}
-                      placeholder={String(outstanding)} className={input} />
-                    <button type="button" disabled={busy}
-                      onClick={() => act("/payment", { amount: payAmount === "" ? undefined : Number(payAmount), recorded_by: "admin" }, "POST", "Payment recorded.")}
-                      className="shrink-0 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50">
-                      Collect
+                  <div className="space-y-2">
+                    <div>
+                      <p className={lbl}>Collected from customer</p>
+                      <input type="number" inputMode="decimal" step="any" value={payAmount}
+                        onChange={(e) => setPayAmount(e.target.value)}
+                        placeholder={String(outstanding)} className={input} />
+                    </div>
+                    <div>
+                      <p className={lbl}>Courier delivery charge</p>
+                      <input type="number" inputMode="decimal" step="any" value={deliveryCharge}
+                        onChange={(e) => setDeliveryCharge(e.target.value)}
+                        placeholder="0" className={input} />
+                    </div>
+
+                    {/* The arithmetic spelled out, so there is no guessing what
+                        will be saved before the button is pressed. */}
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-[11px] tabular-nums text-emerald-900">
+                        {taka(collectNow)} collected − {taka(chargeNow)} courier
+                      </p>
+                      <p className="mt-0.5 text-sm font-bold tabular-nums text-emerald-800">
+                        = {taka(collectNow - chargeNow)} reaches you
+                      </p>
+                    </div>
+
+                    <button type="button" disabled={busy || collectNow - chargeNow < 0}
+                      onClick={() => act("/payment", {
+                        amount: payAmount === "" ? undefined : Number(payAmount),
+                        delivery_charge: chargeNow,
+                        recorded_by: "admin",
+                      }, "POST", "Payment recorded.")}
+                      className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50">
+                      Record payment
                     </button>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    Leave blank to collect the full outstanding {taka(outstanding)}.
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    Leave the first box blank to collect the full outstanding {taka(outstanding)}. The courier&apos;s cut
+                    is recorded separately — the customer still counts as having paid in full.
                   </p>
                 </div>
               )}
