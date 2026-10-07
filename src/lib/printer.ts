@@ -60,7 +60,7 @@ export async function disconnectPrinter(): Promise<void> {
 async function sendRaw(data: Uint8Array): Promise<void> {
   if (!_device || !_device.opened) throw new Error("Printer not connected. Click 'Connect Printer' first.");
   // Send as single transfer — let the USB stack handle packetization
-  await _device.transferOut(_endpointOut, data);
+  await _device.transferOut(_endpointOut, new Uint8Array(data));
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -381,7 +381,7 @@ export async function testPrint(width_mm = 76, height_mm = 180): Promise<void> {
     "PRINT 1, 1",
   ].join("\r\n") + "\r\n";
   console.log("[TSPL] Sending:\n", cmd);
-  const result = await _device!.transferOut(_endpointOut, enc(cmd));
+  const result = await _device!.transferOut(_endpointOut, new Uint8Array(enc(cmd)));
   console.log("[TSPL] transferOut result:", result.status, "bytes:", result.bytesWritten);
 }
 
