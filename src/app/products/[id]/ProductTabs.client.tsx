@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import SeoTab from "./ProductSeoTab.client";
 import {
   connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
   printLabel, calibratePrinter, feedLabels, LABEL_PRESETS,
@@ -21,6 +22,11 @@ type AiLang = {
   og_description?: string;
   focus_keyword?: string;
   secondary_keywords?: string[];
+  long_tail_keywords?: string[];
+  geo_keywords?: string[];
+  seo_heading?: string;
+  seo_content?: string;
+  seo_content_bn?: string;
   alt_text?: string;
   tags?: string[];
   faq?: { question: string; answer: string }[];
@@ -1037,89 +1043,6 @@ function TagsTab({
 }
 
 // ─── SEO ─────────────────────────────────────────────────────────────────────
-
-function SeoTab({
-  productId,
-  initial,
-  aiData,
-}: {
-  productId: string;
-  initial: Record<string, unknown>;
-  aiData?: AiData;
-}) {
-  const [metaTitle, setMetaTitle] = useState((initial.meta_title as string) ?? "");
-  const [metaDescription, setMetaDescription] = useState((initial.meta_description as string) ?? "");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [aiApplied, setAiApplied] = useState(false);
-
-  useEffect(() => {
-    if (!aiData?.en) return;
-    if (aiData.en.meta_title) setMetaTitle(aiData.en.meta_title);
-    if (aiData.en.meta_description) setMetaDescription(aiData.en.meta_description);
-    setAiApplied(true);
-  }, [aiData]);
-
-  const fallbackTitle = `${initial.name ?? "Product"} — ${initial.material ?? "Genuine Leather"} | RIZZ`;
-  const fallbackDescription = String(initial.short_description ?? initial.description ?? "").slice(0, 160);
-  const previewTitle = metaTitle || fallbackTitle;
-  const previewDescription = metaDescription || fallbackDescription;
-  const previewUrl = `rizzleather.com/brand/catalog/${initial.slug ?? ""}`;
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setMsg(null);
-    try {
-      await api(`/products/${productId}`, "PATCH", {
-        meta_title: metaTitle || undefined,
-        meta_description: metaDescription || undefined,
-      });
-      setMsg({ text: "SEO saved.", ok: true });
-    } catch {
-      setMsg({ text: "Failed. Check API.", ok: false });
-    } finally { setSaving(false); }
-  }
-
-  return (
-    <form onSubmit={save} className="space-y-5">
-      {msg && <Msg text={msg.text} ok={msg.ok} />}
-      {aiApplied && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-xs text-violet-800">
-          ✨ AI SEO content applied! Review and click <strong>Save SEO</strong>.
-          {aiData?.en?.focus_keyword && (
-            <span className="ml-2 text-violet-600">Focus keyword: <strong>{aiData.en.focus_keyword}</strong></span>
-          )}
-        </div>
-      )}
-      <p className="text-xs text-slate-400">
-        Leave blank to auto-generate from the product&apos;s name, material, and description — only set these if you want
-        full control over how this product appears in Google search results and AI answer engines.
-      </p>
-
-      {/* Google-style preview */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-xs text-slate-500">{previewUrl}</p>
-        <p className="mt-0.5 text-base text-blue-700 truncate">{previewTitle}</p>
-        <p className="mt-0.5 text-sm text-slate-600 line-clamp-2">{previewDescription || "No description set."}</p>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between">
-          <p className={lbl}>Meta Title</p>
-          <span className={`text-xs ${metaTitle.length > 60 ? "text-rose-500" : "text-slate-400"}`}>{metaTitle.length}/60</span>
-        </div>
-        <input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} placeholder={fallbackTitle} className={field} />
-      </div>
-      <div>
-        <div className="flex items-center justify-between">
-          <p className={lbl}>Meta Description</p>
-          <span className={`text-xs ${metaDescription.length > 160 ? "text-rose-500" : "text-slate-400"}`}>{metaDescription.length}/160</span>
-        </div>
-        <textarea value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} rows={3} placeholder={fallbackDescription} className={field + " resize-none"} />
-      </div>
-      <SaveBtn saving={saving} label="Save SEO" />
-    </form>
-  );
-}
 
 // ─── Images ──────────────────────────────────────────────────────────────────
 

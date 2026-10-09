@@ -54,6 +54,8 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
     "og_description": "OG description max 200 chars",
     "focus_keyword": "primary SEO keyword",
     "secondary_keywords": ["keyword2", "keyword3", "keyword4"],
+    "long_tail_keywords": ["natural product-specific shopping phrase"],
+    "geo_keywords": ["product shopping phrase in Bangladesh"],
     "alt_text": "Descriptive image alt text for accessibility and SEO",
     "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
     "faq": [
@@ -113,7 +115,7 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
 \`\`\``;
 
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
+      model: process.env.ANTHROPIC_PRODUCT_MODEL || process.env.ANTHROPIC_SEO_MODEL || "claude-sonnet-4-6",
       max_tokens: 8000,
       messages: [
         {
