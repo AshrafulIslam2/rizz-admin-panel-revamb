@@ -1,28 +1,44 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
+import { createAiStream } from "@/lib/ai-stream";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+export const runtime = "nodejs";
+export const maxDuration = 180;
+
+type GenerationInput = { imageUrl: string; productName?: string; category?: string };
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { imageUrl, productName, category } = body as {
-      imageUrl?: string;
-      productName?: string;
-      category?: string;
-    };
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!token || !await verifySessionToken(token)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let body;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON request." }, { status: 400 }); }
+  if (!body || typeof body.imageUrl !== "string" || !body.imageUrl.trim()) return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "AI is not configured. Set ANTHROPIC_API_KEY on the admin server." }, { status: 503 });
+  const input: GenerationInput = {
+    imageUrl: body.imageUrl.trim(),
+    productName: typeof body.productName === "string" ? body.productName.slice(0, 500) : undefined,
+    category: typeof body.category === "string" ? body.category.slice(0, 300) : undefined,
+  };
+  const generate = (signal: AbortSignal) => generateContent(input, signal);
+  if (req.headers.get("accept")?.includes("application/x-ndjson")) return createAiStream(req, generate);
+  const result = await generate(req.signal);
+  return NextResponse.json(result, { status: result.success ? 200 : 502 });
+}
 
-    if (!imageUrl) {
-      return NextResponse.json({ error: "imageUrl is required" }, { status: 400 });
-    }
+async function generateContent({ imageUrl, productName, category }: GenerationInput, signal: AbortSignal) {
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 150000, maxRetries: 0 });
 
     // Fetch image → base64
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error("Failed to fetch product image");
+    const imgRes = await fetch(imageUrl, { signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]) });
+    if (!imgRes.ok) throw new Error("Could not load the product image. Check its public image URL.");
     const imgBuffer = await imgRes.arrayBuffer();
     const base64 = Buffer.from(imgBuffer).toString("base64");
-    const mimeType = (imgRes.headers.get("content-type") || "image/jpeg") as
+    const mimeType = (imgRes.headers.get("content-type") || "image/jpeg").split(";")[0].trim().toLowerCase() as
       | "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(mimeType)) throw new Error("The product image must be JPEG, PNG, GIF or WebP.");
+    if (imgBuffer.byteLength > 5 * 1024 * 1024) throw new Error("The product image is too large for AI. Use an image smaller than 5 MB.");
 
     const hints = [
       productName ? `Product Name: ${productName}` : "",
@@ -126,12 +142,12 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
           ],
         },
       ],
-    });
+    }, { signal });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const raw = response.content.filter(block => block.type === "text").map(block => block.text).join("");
 
     if (response.stop_reason === "max_tokens") {
-      console.error("[generate-product-content] Response truncated (hit max_tokens). Raw output:", raw);
+      console.error("[generate-product-content] Response reached max_tokens.");
       throw new Error("AI response was cut off before finishing — please try again.");
     }
 
@@ -142,9 +158,11 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
     try {
       data = JSON.parse(match[1]);
     } catch (parseErr) {
-      console.error("[generate-product-content] JSON.parse failed. Raw AI output:\n", raw);
+      console.error("[generate-product-content] AI output was not valid JSON.");
       throw new Error("AI returned malformed content — please try again.");
     }
+
+    if (!data || typeof data.en !== "object" || typeof data.bn !== "object") throw new Error("AI returned an incomplete bilingual draft. Please try again.");
 
     // Build FAQ schema from EN FAQs
     if (data.en?.faq && data.schema?.faq_schema) {
@@ -160,9 +178,17 @@ Return ONLY valid JSON (no extra text, no markdown outside the json block):
       data.schema.product.image = imageUrl;
     }
 
-    return NextResponse.json({ success: true, data });
-  } catch (err: any) {
-    console.error("[generate-product-content]", err);
-    return NextResponse.json({ error: err.message || "Generation failed" }, { status: 500 });
+    return { success: true, data };
+  } catch (error) {
+    console.error("[generate-product-content]", error instanceof Error ? error.name : "Generation error");
+    const message = signal.aborted || (error instanceof Error && /timeout|abort/i.test(error.name))
+      ? "AI took too long to respond. Please try again."
+      : error instanceof Anthropic.APIError
+        ? error.status === 401 ? "AI provider credentials are invalid. Check ANTHROPIC_API_KEY on the admin server."
+          : error.status === 429 ? "AI request limit reached. Please try again later."
+          : error.status === 404 ? "The configured AI model is unavailable. Check ANTHROPIC_PRODUCT_MODEL."
+          : "AI provider could not complete the request. Please try again."
+        : error instanceof Error ? error.message : "Generation failed.";
+    return { success: false, error: message };
   }
 }

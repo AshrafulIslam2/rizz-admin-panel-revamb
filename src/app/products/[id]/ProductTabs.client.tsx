@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import SeoTab from "./ProductSeoTab.client";
+import { readApiResponse } from "@/lib/api-response";
 import {
   connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
   printLabel, calibratePrinter, feedLabels, LABEL_PRESETS,
@@ -60,13 +61,14 @@ function AiGenerateBar({
     try {
       // 1. Fetch product media to get primary image
       const mediaRes = await fetch(`${API}/products/${productId}/media`, { cache: "no-store" });
-      const mediaData = mediaRes.ok ? await mediaRes.json() : [];
+      const mediaData = await readApiResponse(mediaRes);
       const mediaList: any[] = Array.isArray(mediaData)
         ? mediaData
         : mediaData?.media ?? mediaData?.images ?? [];
 
       const primary =
-        mediaList.find((m: any) => m.is_primary) ?? mediaList[0];
+        mediaList.filter((m: any) => m.media_type !== "VIDEO").find((m: any) => m.is_primary)
+        ?? mediaList.find((m: any) => m.media_type !== "VIDEO");
       const imageUrl = primary?.media_url ?? primary?.url ?? primary?.image_url;
 
       if (!imageUrl) {
@@ -77,11 +79,11 @@ function AiGenerateBar({
       // 2. Call our AI API
       const res = await fetch("/api/generate-product-content", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({ imageUrl, productName }),
       });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error || "Generation failed");
+      const json = await readApiResponse(res);
+      if (!json?.success || !json.data) throw new Error(json?.error || "Generation failed");
 
       const raw = json.data;
       // Support both old flat format and new bilingual format
@@ -126,7 +128,7 @@ function AiGenerateBar({
           disabled={loading}
           className="shrink-0 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60 transition whitespace-nowrap"
         >
-          {loading ? "⏳ Generating… (15-25s)" : "✨ Generate AI Content"}
+          {loading ? "⏳ Generating… please wait" : "✨ Generate AI Content"}
         </button>
       </div>
       {error && (
@@ -275,8 +277,7 @@ function RefinableTextarea({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fieldType, draft: value, productName, category }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Refine failed");
+      const data = await readApiResponse(res);
       setRefined(data.refined);
     } catch (e: any) {
       setError(e.message || "Failed to refine. Check API.");

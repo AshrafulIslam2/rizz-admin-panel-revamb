@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readApiResponse } from "@/lib/api-response";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
 const field = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400";
@@ -70,7 +71,7 @@ export default function ProductSeoTab({ productId, initial, aiData }: {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product: { name: product.name, material: product.material, specs: product.specs, craftsmanship: product.craftsmanship, tags: product.tags, category: category?.name ?? "", description: product.description || product.short_description || "" }, draft: payload(), instructions }),
       });
-      const result = await response.json();
+      const result = await readApiResponse(response);
       if (!response.ok || !result.success) throw new Error(result.error || "SEO generation failed.");
       setPreview(result.data);
     } catch (error) { setMsg({ text: error instanceof Error ? error.message : "Generation failed.", ok: false }); }
