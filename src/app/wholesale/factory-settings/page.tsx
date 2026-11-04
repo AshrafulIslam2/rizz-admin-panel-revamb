@@ -96,6 +96,9 @@ export default function FactoryCostSettingsPage() {
 
   const totalMonthly = useMemo(() => Object.values(monthlyNumbers).reduce((a, b) => a + b, 0), [monthlyNumbers]);
 
+  /** Snacks / welfare for one person for a month — each line pays this for each of its people. */
+  const snacksPerHead = activeStaff.length > 0 ? Math.round(((monthlyNumbers[WELFARE_FIELD_KEY] ?? 0) / activeStaff.length) * 100) / 100 : 0;
+
   const pools = useMemo(() => {
     const cf = fields as unknown as CostFieldLike[];
     return Object.fromEntries(PRODUCT_LINES.map((line) => [line, calcFactoryLinePool(monthlyNumbers, cf, staff, line)])) as Record<
@@ -255,7 +258,7 @@ export default function FactoryCostSettingsPage() {
                           {fromList
                             ? "Total of the Production Staff list above"
                             : f.key === WELFARE_FIELD_KEY && usesEmployees
-                              ? "Split by headcount — each line pays for its own people"
+                              ? `${taka(snacksPerHead)} per person a month — each line pays for the people who work on it`
                               : f.help_text}
                         </p>
                       </div>
@@ -283,7 +286,15 @@ export default function FactoryCostSettingsPage() {
                           <span>Wages{p.usesEmployees ? ` (${p.labourHeadcount} of ${p.totalHeadcount} people)` : ""}</span>
                           <span className="tabular-nums">{taka(p.labour)}</span>
                         </div>
-                        <div className="flex justify-between"><span>Snacks / welfare</span><span className="tabular-nums">{taka(p.welfare)}</span></div>
+                        <div className="flex justify-between">
+                          <span>
+                            Snacks / welfare
+                            {p.usesEmployees && p.totalHeadcount > 0 && (
+                              <span className="text-teal-700/80"> ({p.labourHeadcount} × {taka(snacksPerHead)})</span>
+                            )}
+                          </span>
+                          <span className="tabular-nums">{taka(p.welfare)}</span>
+                        </div>
                         <div className="flex justify-between"><span>Rent, electricity and other bills</span><span className="tabular-nums">{taka(p.shared)}</span></div>
                         <div className="flex justify-between border-t border-teal-200 pt-1 font-bold"><span>Monthly pool</span><span className="tabular-nums">{taka(p.total)}</span></div>
                       </div>

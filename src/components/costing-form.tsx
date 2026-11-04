@@ -871,7 +871,15 @@ export default function CostingForm({ costingId }: Props) {
                     </span>
                     <span>{taka(linePool.labour)}</span>
                   </div>
-                  <div className="flex justify-between"><span>Snacks / welfare{linePool.usesEmployees ? " (by headcount)" : ""}</span><span>{taka(linePool.welfare)}</span></div>
+                  <div className="flex justify-between">
+                    <span>
+                      Snacks / welfare
+                      {linePool.usesEmployees && linePool.labourHeadcount > 0
+                        ? ` (${linePool.labourHeadcount} × ${taka(Math.round((linePool.welfare / linePool.labourHeadcount) * 100) / 100)})`
+                        : ""}
+                    </span>
+                    <span>{taka(linePool.welfare)}</span>
+                  </div>
                   <div className="flex justify-between"><span>Rent, electricity and other bills</span><span>{taka(linePool.shared)}</span></div>
                   <div className="flex justify-between border-t border-teal-200 pt-1 font-semibold">
                     <span>{taka(linePool.total)} ÷ {result.standardCapacityDozen.toLocaleString()} dozen</span>
