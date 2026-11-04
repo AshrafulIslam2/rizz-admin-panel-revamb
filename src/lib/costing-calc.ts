@@ -338,6 +338,149 @@ export function calcFactoryAllocation(
   };
 }
 
+// ── Product lines and the labour pool ───────────────────────────────────────
+//
+// Workers are tagged with the lines they work on. A design is charged only
+// the wages of people who actually make that kind of product: a shoe-only
+// laster never lands on a sandal's cost, a sandal fitting man never lands on
+// a shoe's, and the upperman, sewing man, finisher and helper — who work on
+// both — land on both.
+//
+// That is not double counting. The divisor is each design's standard
+// capacity: "if the factory made only this for a month, how many pairs?" In
+// that month everyone on the line works on it full time, so the full salary of
+// each of them belongs over those pairs. In a mixed month their time splits,
+// but the cost of each pair stays the same.
+
+export type ProductLineKey = 'SHOE' | 'SANDAL';
+export const PRODUCT_LINES: ProductLineKey[] = ['SHOE', 'SANDAL'];
+export const PRODUCT_LINE_LABELS: Record<ProductLineKey, string> = { SHOE: 'Shoe', SANDAL: 'Sandal' };
+
+/** Reserved key inside a costing's values holding its product line, like MODES_KEY. */
+export const LINE_KEY = '__line';
+
+/** The monthly factory field that the employee list replaces once it has anyone in it. */
+export const LABOUR_FIELD_KEY = 'factory_labour';
+/** Snacks and welfare follow people, so they are shared out by headcount. */
+export const WELFARE_FIELD_KEY = 'factory_staff_welfare';
+
+export type FactoryEmployee = {
+  id: string;
+  name: string;
+  role?: string | null;
+  monthly_salary: number;
+  /** Lines this person works on. Both = common worker. */
+  lines: ProductLineKey[];
+  /** Inactive people stay on the list (history) but cost nothing. */
+  active?: boolean;
+};
+
+export function isProductLine(v: unknown): v is ProductLineKey {
+  return v === 'SHOE' || v === 'SANDAL';
+}
+
+/** The line saved on a costing, or null when none has been chosen yet. */
+export function getLine(values: Record<string, unknown> | null | undefined): ProductLineKey | null {
+  const v = values?.[LINE_KEY];
+  return isProductLine(v) ? v : null;
+}
+
+const SANDAL_WORDS = /\b(sandals?|slides?|flip[- ]?flops?|slippers?|chappals?|mules?|thongs?)\b/;
+const SHOE_WORDS = /\b(shoes?|loafers?|boots?|chelsea|oxfords?|brogues?|sneakers?|moccasins?|derby|pumps?)\b/;
+
+/**
+ * Best guess at the line from the category, then the product name — used until
+ * the admin picks one. Null when nothing fits clearly; such a design is charged
+ * the whole team, exactly as before the employee list existed.
+ */
+export function inferProductLine(
+  category: string | null | undefined,
+  productName?: string | null,
+): ProductLineKey | null {
+  for (const text of [category, productName]) {
+    const t = String(text ?? '').toLowerCase();
+    if (!t) continue;
+    const sandal = SANDAL_WORDS.test(t);
+    const shoe = SHOE_WORDS.test(t);
+    if (sandal && !shoe) return 'SANDAL';
+    if (shoe && !sandal) return 'SHOE';
+  }
+  return null;
+}
+
+/** People who currently cost money. */
+export function activeEmployees(list: unknown): FactoryEmployee[] {
+  if (!Array.isArray(list)) return [];
+  return (list as FactoryEmployee[]).filter((e) => e && e.active !== false);
+}
+
+/** No line chosen = charged to everyone, the pre-employee behaviour. */
+export function employeeWorksOn(e: FactoryEmployee, line: ProductLineKey | null): boolean {
+  return line === null || (Array.isArray(e.lines) && e.lines.includes(line));
+}
+
+export type FactoryLinePool = {
+  line: ProductLineKey | null;
+  /** False until at least one active employee exists; then the salary field is ignored. */
+  usesEmployees: boolean;
+  /** Wages charged to this line. */
+  labour: number;
+  labourHeadcount: number;
+  totalHeadcount: number;
+  /** Snacks / welfare after the headcount share. */
+  welfare: number;
+  /** Rent, electricity, maintenance and the rest — shared by every line. */
+  shared: number;
+  /** What a design on this line divides by its capacity. */
+  total: number;
+};
+
+/**
+ * The monthly factory pool one design is costed against.
+ *
+ *   wages of people on the line
+ *   + snacks/welfare × (people on the line ÷ everyone)
+ *   + every other monthly bill in full
+ *
+ * With no employees entered it returns the bills exactly as typed — the
+ * original behaviour — so existing costings do not move until the list is used.
+ */
+export function calcFactoryLinePool(
+  monthlyValues: Record<string, unknown> | null | undefined,
+  fields: CostFieldLike[],
+  employees: unknown,
+  line: ProductLineKey | null,
+): FactoryLinePool {
+  const staff = activeEmployees(employees);
+  const usesEmployees = staff.length > 0;
+
+  let typedLabour = 0;
+  let welfareFull = 0;
+  let shared = 0;
+  for (const f of fields) {
+    if (!fieldIsFactoryMonthly(f) || !usable(f)) continue;
+    const amount = num(monthlyValues?.[f.key]);
+    if (f.key === LABOUR_FIELD_KEY) typedLabour += amount;
+    else if (f.key === WELFARE_FIELD_KEY) welfareFull += amount;
+    else shared += amount;
+  }
+
+  const onLine = staff.filter((e) => employeeWorksOn(e, line));
+  const labour = usesEmployees ? onLine.reduce((sum, e) => sum + num(e.monthly_salary), 0) : typedLabour;
+  const welfare = usesEmployees ? welfareFull * (onLine.length / staff.length) : welfareFull;
+
+  return {
+    line,
+    usesEmployees,
+    labour: money(labour),
+    labourHeadcount: onLine.length,
+    totalHeadcount: staff.length,
+    welfare: money(welfare),
+    shared: money(shared),
+    total: money(labour + welfare + shared),
+  };
+}
+
 export function calcCosting(input: CostingInput): CostingResult {
   const values = input.values ?? {};
   const fields = input.fields ?? [];

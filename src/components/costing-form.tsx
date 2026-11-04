@@ -18,9 +18,16 @@ import {
   updateCosting,
 } from "@/lib/costing-api";
 import {
+  LINE_KEY,
   MODES_KEY,
   PAIRS_PER_DOZEN,
+  PRODUCT_LINES,
+  PRODUCT_LINE_LABELS,
   calcCosting,
+  calcFactoryLinePool,
+  inferProductLine,
+  isProductLine,
+  type ProductLineKey,
   calcEntry,
   chemicalUnitCost,
   fieldIsFactoryMonthly,
@@ -289,6 +296,8 @@ export default function CostingForm({ costingId }: Props) {
    * Set once as a standard — not an actual output figure re-entered monthly.
    */
   const [capacityPairs, setCapacityPairs] = useState("");
+  /** Shoe or Sandal, as chosen; "" = not chosen yet, guessed from category / name. */
+  const [lineChoice, setLineChoice] = useState<ProductLineKey | "">("");
   /** What the pool stood at when this record was last saved, for comparison. */
   const [savedFactoryTotal, setSavedFactoryTotal] = useState<number | null>(null);
   const [wholesalePct, setWholesalePct] = useState("");
@@ -333,6 +342,10 @@ export default function CostingForm({ costingId }: Props) {
             setModes((val ?? {}) as Record<string, string>);
             continue;
           }
+          if (k === LINE_KEY) {
+            setLineChoice(isProductLine(val) ? val : "");
+            continue;
+          }
           if (val !== null && typeof val === "object") {
             v[k] = Object.fromEntries(
               Object.entries(val as Record<string, unknown>).map(([kk, vv]) => [kk, vv === null || vv === undefined ? "" : String(vv)]),
@@ -360,18 +373,34 @@ export default function CostingForm({ costingId }: Props) {
   /** The modes travel inside `values` under a reserved key, exactly as stored. */
   const valuesWithModes = useMemo(() => ({ ...values, [MODES_KEY]: modes }), [values, modes]);
 
+  /** The line this design is costed on: the admin's pick, else a guess, else none. */
+  const guessedLine = inferProductLine(product.category, product.product_name);
+  const effectiveLine: ProductLineKey | null = lineChoice || guessedLine;
+
+  /** Only wages of people on this line, snacks by headcount, other bills shared. */
+  const linePool = useMemo(
+    () =>
+      calcFactoryLinePool(
+        factory?.monthly ?? {},
+        fields as unknown as CostFieldLike[],
+        factory?.employees ?? [],
+        effectiveLine,
+      ),
+    [factory, fields, effectiveLine],
+  );
+
   // ── Live totals (identical maths to the server) ──
   const result = useMemo(() => {
     return calcCosting({
       values: valuesWithModes,
       fields: fields as unknown as CostFieldLike[],
       standardCapacityPairs: num(capacityPairs),
-      factoryMonthlyTotal: factory?.total_monthly ?? 0,
+      factoryMonthlyTotal: linePool.total,
       wholesaleProfitPct: num(wholesalePct),
       retailProfitPct: num(retailPct),
       retailCommonCostPair: retail?.retail_common_cost_pair ?? 0,
     });
-  }, [valuesWithModes, fields, capacityPairs, factory, wholesalePct, retailPct, retail]);
+  }, [valuesWithModes, fields, capacityPairs, linePool, wholesalePct, retailPct, retail]);
 
   const bySection = useMemo(() => {
     const m: Record<string, CostField[]> = {};
@@ -471,6 +500,8 @@ export default function CostingForm({ costingId }: Props) {
         payloadValues[k] = serialize(f, values[k]);
       }
       payloadValues[MODES_KEY] = modes;
+      // The line always travels, so the server costs exactly what is shown here.
+      if (effectiveLine) payloadValues[LINE_KEY] = effectiveLine;
 
       const base = {
         ...product,
@@ -751,6 +782,35 @@ export default function CostingForm({ costingId }: Props) {
             <div className="space-y-5">
               <h2 className="text-lg font-bold text-slate-900">Factory &amp; Labour</h2>
 
+              {/* Which team makes this design — decides whose wages it carries */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h3 className="text-sm font-bold text-slate-900">Production Line</h3>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  This design carries only the wages of staff who work on this line.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {PRODUCT_LINES.map((line) => {
+                    const on = effectiveLine === line;
+                    return (
+                      <button key={line} type="button" onClick={() => { setLineChoice(line); setMessage(null); }}
+                        className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition ${
+                          on ? "border-teal-600 bg-teal-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                        }`}>
+                        {PRODUCT_LINE_LABELS[line]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!lineChoice && guessedLine && (
+                  <p className="mt-2 text-[11px] text-slate-500">Picked from the category / name. Tap the other one if that&apos;s wrong.</p>
+                )}
+                {!effectiveLine && (
+                  <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                    No line chosen, so the whole team&apos;s wages are charged. Choose Shoe or Sandal.
+                  </p>
+                )}
+              </div>
+
               {/* The one number that is genuinely per-design */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5">
                 <h3 className="text-sm font-bold text-slate-900">Standard Production Capacity</h3>
@@ -801,9 +861,22 @@ export default function CostingForm({ costingId }: Props) {
               {/* The allocation, shown as arithmetic rather than a bare figure */}
               <div className="rounded-2xl border border-teal-200 bg-teal-50 p-5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700">Allocated to this design</p>
-                <p className="mt-1 text-xs tabular-nums text-teal-900">
-                  {taka(result.factoryMonthlyTotal)} ÷ {result.standardCapacityDozen.toLocaleString()} dozen
-                </p>
+                <div className="mt-2 space-y-1 text-xs tabular-nums text-teal-900">
+                  <div className="flex justify-between">
+                    <span>
+                      Wages
+                      {linePool.usesEmployees
+                        ? ` — ${linePool.labourHeadcount} of ${linePool.totalHeadcount} staff${effectiveLine ? ` on ${PRODUCT_LINE_LABELS[effectiveLine]}` : ""}`
+                        : " — single salary figure"}
+                    </span>
+                    <span>{taka(linePool.labour)}</span>
+                  </div>
+                  <div className="flex justify-between"><span>Snacks / welfare{linePool.usesEmployees ? " (by headcount)" : ""}</span><span>{taka(linePool.welfare)}</span></div>
+                  <div className="flex justify-between"><span>Rent, electricity and other bills</span><span>{taka(linePool.shared)}</span></div>
+                  <div className="flex justify-between border-t border-teal-200 pt-1 font-semibold">
+                    <span>{taka(linePool.total)} ÷ {result.standardCapacityDozen.toLocaleString()} dozen</span>
+                  </div>
+                </div>
                 <div className="mt-3 border-t border-teal-300 pt-3">
                   <Stat label="Factory &amp; Labour Cost / Dozen" value={taka(result.factoryAllocatedDozen)} strong accent />
                   <Stat label="Factory &amp; Labour Cost / Pair" value={taka(result.factoryAllocatedPair)} strong accent />
@@ -813,10 +886,10 @@ export default function CostingForm({ costingId }: Props) {
                 </p>
               </div>
 
-              {savedFactoryTotal !== null && savedFactoryTotal !== (factory?.total_monthly ?? 0) && (
+              {savedFactoryTotal !== null && Math.abs(savedFactoryTotal - linePool.total) > 0.005 && (
                 <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
                   This costing was last saved against a monthly pool of {taka(savedFactoryTotal)}. Saving now will reprice it
-                  against the current {taka(factory?.total_monthly ?? 0)}.
+                  against the current {taka(linePool.total)}.
                 </p>
               )}
 

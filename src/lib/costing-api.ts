@@ -6,6 +6,7 @@
  * plainly what went wrong.
  */
 import { CLIENT_API_BASE } from "@/lib/api-base";
+import type { FactoryEmployee, FactoryLinePool, ProductLineKey } from "@/lib/costing-calc";
 
 export const COSTING_API = CLIENT_API_BASE;
 
@@ -34,7 +35,11 @@ export type CostField = {
 export type FactorySettings = {
   /** fieldKey -> monthly amount, for FACTORY fields on a PER_MONTH basis. */
   monthly: Record<string, number>;
+  /** Production staff tagged Shoe / Sandal / both. Empty = the single salary figure is used. */
+  employees: FactoryEmployee[];
   total_monthly: number;
+  /** The pool a Shoe design and a Sandal design are each costed against. */
+  line_pools: Record<ProductLineKey, FactoryLinePool>;
 };
 
 export type RetailSettings = {
@@ -117,7 +122,7 @@ export const archiveCostField = (id: string) => call<CostField>(`/costing/fields
 
 // ── Factory settings (shop-wide monthly bills) ──
 export const getFactorySettings = () => call<FactorySettings>("/costing/factory-settings");
-export const saveFactorySettings = (dto: { monthly: Record<string, number> }) =>
+export const saveFactorySettings = (dto: { monthly: Record<string, number>; employees?: FactoryEmployee[] }) =>
   call<FactorySettings>("/costing/factory-settings", "PUT", dto);
 
 // ── Retail settings ──
