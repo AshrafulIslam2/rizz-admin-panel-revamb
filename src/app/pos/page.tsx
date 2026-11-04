@@ -11,7 +11,26 @@ import { CLIENT_API_BASE } from "@/lib/api-base";
 const API = CLIENT_API_BASE;
 
 type Variant = { id: string; sku?: string; barcode?: string; price: number; sale_price?: number | null; stock_qty: number; attributes: any };
-type Product = { id: string; name: string; slug: string; sku?: string | null; variants: Variant[] };
+type ProductMedia = { media_url: string; media_type?: string; is_primary?: boolean; alt_text?: string | null };
+type Product = { id: string; name: string; slug: string; sku?: string | null; variants: Variant[]; media?: ProductMedia[] };
+
+/**
+ * Thumbnail for a search result. Prefers a photo whose file name or alt text
+ * mentions the variant's colour (so "Tan" shows the tan pair), then the
+ * primary photo, then the first one.
+ */
+function variantImage(p: Product, v: Variant): string | null {
+  const photos = (p.media ?? []).filter((m) => m.media_url && (m.media_type ?? "IMAGE").toUpperCase() !== "VIDEO");
+  if (photos.length === 0) return null;
+  const color = String(v.attributes?.color ?? "").trim().toLowerCase();
+  if (color) {
+    // Whole-word match, so "tan" doesn't hit words like "standard".
+    const word = new RegExp(`(^|[^a-z])${color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`);
+    const byColor = photos.find((m) => word.test(`${m.media_url} ${m.alt_text ?? ""}`.toLowerCase()));
+    if (byColor) return byColor.media_url;
+  }
+  return (photos.find((m) => m.is_primary) ?? photos[0]).media_url;
+}
 type CartItem = { variant_id: string; name: string; color: string; size: string; price: number; original_price: number; qty: number; sku?: string };
 
 // Thermal receipt RIZZ logo (SVG inline, matches the black+white R brand mark)
@@ -510,15 +529,26 @@ export default function PosPage() {
             <div className="relative">
               <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSearchEnter(); } }} placeholder="Search product, SKU, or scan barcode…" className="w-full rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500" autoFocus />
               {filtered.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-white/10 bg-slate-900 shadow-xl overflow-hidden">
+                <div className="absolute top-full left-0 right-0 z-10 mt-1 max-h-[65vh] overflow-y-auto rounded-xl border border-white/10 bg-slate-900 shadow-xl">
                   {filtered.map((p) =>
-                    (p.variants ?? []).map((v) => (
-                      <button key={v.id} onClick={() => addToCart(p, v)} className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-white/10 transition border-b border-white/5 last:border-0">
-                        <div>
-                          <p className="text-sm text-white">{p.name}</p>
-                          <p className="text-xs text-slate-400">{v.attributes?.color} · {v.attributes?.size}{v.sku ? ` · ${v.sku}` : ""}</p>
+                    (p.variants ?? []).map((v) => {
+                      const img = variantImage(p, v);
+                      const outOfStock = v.stock_qty <= 0;
+                      return (
+                      <button key={v.id} onClick={() => addToCart(p, v)} disabled={outOfStock} className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition border-b border-white/5 last:border-0 ${outOfStock ? "opacity-50 cursor-not-allowed" : "hover:bg-white/10"}`}>
+                        {img ? (
+                          <img src={img} alt="" loading="lazy" className="h-14 w-14 shrink-0 rounded-lg bg-slate-800 object-cover" />
+                        ) : (
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-[10px] text-slate-500">No image</div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs text-slate-400">{p.name}</p>
+                          <p className="mt-0.5 text-sm font-semibold text-white">
+                            {[v.attributes?.color, v.attributes?.size && `Size ${v.attributes.size}`].filter(Boolean).join(" · ") || "Default"}
+                          </p>
+                          {v.sku && <p className="truncate text-[11px] text-slate-500">{v.sku}</p>}
                         </div>
-                        <div className="text-right">
+                        <div className="shrink-0 text-right">
                           {v.sale_price && v.sale_price > 0 && v.sale_price < v.price ? (
                             <div>
                               <p className="text-sm font-medium text-teal-400">৳{v.sale_price}</p>
@@ -530,7 +560,8 @@ export default function PosPage() {
                           <p className={`text-xs ${v.stock_qty > 0 ? "text-emerald-400" : "text-rose-400"}`}>{v.stock_qty > 0 ? `${v.stock_qty} in stock` : "Out of stock"}</p>
                         </div>
                       </button>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
