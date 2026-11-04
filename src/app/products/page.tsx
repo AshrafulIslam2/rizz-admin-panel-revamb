@@ -174,9 +174,9 @@ export default async function ProductsPage({
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-10">
+    <main className="max-w-6xl mx-auto px-3 py-6 sm:px-6 sm:py-10">
       <AutoRefresh intervalMs={15000} />
-      <div className="rounded-2xl bg-white/80 backdrop-blur border border-white/60 shadow-lg p-6">
+      <div className="rounded-2xl bg-white/80 backdrop-blur border border-white/60 shadow-lg p-3 sm:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Products</h1>
@@ -197,7 +197,7 @@ export default async function ProductsPage({
           </Suspense>
         </div>
 
-        <div className="grid gap-4 mt-6 grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4 lg:grid-cols-3">
           {pageItems.map((p: Product) => {
             const img = cardImage(p)
             const price = cardPrice(p)
@@ -225,34 +225,33 @@ export default async function ProductsPage({
                   </div>
                 )}
 
-                {/* Dark fade at the bottom keeps the text readable on any photo */}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
-
-                {/* Status badges */}
-                <div className="absolute left-3 right-3 top-3 flex flex-wrap items-start justify-between gap-2">
+                {/* Status badges — stacked on the left so they never collide on narrow cards */}
+                <div className="absolute left-2 top-2 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
                   <span
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm backdrop-blur ${
-                      live ? 'bg-emerald-500/90 text-white' : 'bg-white/85 text-slate-700'
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm sm:px-2.5 sm:py-1 sm:text-[11px] ${
+                      live ? 'bg-emerald-500 text-white' : 'bg-white/90 text-slate-700'
                     }`}
                   >
                     {live ? 'Live' : 'Draft'}
                   </span>
                   {isLowStock && (
-                    <span className="rounded-full bg-red-600/90 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm backdrop-blur">
-                      Low stock · {stock}{reserved > 0 ? ` (${reserved} reserved)` : ''}
+                    <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm sm:px-2.5 sm:py-1 sm:text-[11px]">
+                      {stock} left{reserved > 0 ? <span className="hidden sm:inline"> · {reserved} reserved</span> : null}
                     </span>
                   )}
                 </div>
 
-                {/* Name, SKU, price over the photo */}
-                <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                {/* Text sits on its own short fade at the bottom, so most of the photo stays clean */}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-2.5 pb-2.5 pt-10 text-white sm:px-4 sm:pb-4 sm:pt-14">
                   {p.category?.name && (
-                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-white/70">{p.category.name}</p>
+                    <p className="mb-0.5 hidden text-[11px] font-medium uppercase tracking-wider text-white/70 sm:block">
+                      {p.category.name}
+                    </p>
                   )}
-                  <h2 className="line-clamp-2 text-base font-semibold leading-snug drop-shadow sm:text-lg">{p.name}</h2>
-                  <div className="mt-2 flex items-end justify-between gap-2">
-                    <span className="truncate text-xs text-white/70">SKU: {p.sku || 'N/A'}</span>
-                    <span className="shrink-0 text-lg font-bold drop-shadow">
+                  <h2 className="line-clamp-2 text-[13px] font-semibold leading-tight sm:text-base sm:leading-snug">{p.name}</h2>
+                  <div className="mt-1.5 flex items-center justify-between gap-2">
+                    <span className="hidden min-w-0 truncate text-xs text-white/70 sm:block">SKU: {p.sku || 'N/A'}</span>
+                    <span className="shrink-0 text-sm font-bold sm:ml-auto sm:text-lg">
                       {price > 0 ? `৳${price.toLocaleString()}` : '—'}
                     </span>
                   </div>
