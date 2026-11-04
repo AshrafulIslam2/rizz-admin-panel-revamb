@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { readApiResponse } from "@/lib/api-response";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 const field = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400";
 const label = "mb-1.5 block text-xs font-semibold text-slate-600";
 const stringFields = ["meta_title", "meta_description", "focus_keyword", "seo_heading", "seo_content", "seo_content_bn"] as const;

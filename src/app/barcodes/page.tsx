@@ -6,8 +6,9 @@ import {
   printLabel, calibratePrinter, testPrint, testPrintEscPos, LABEL_PRESETS,
   type LabelData,
 } from "@/lib/printer";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 type Variant = {
   id: string;

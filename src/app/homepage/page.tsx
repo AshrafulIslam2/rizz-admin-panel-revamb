@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 const field = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-teal-400 w-full";
 const lbl = "block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5";

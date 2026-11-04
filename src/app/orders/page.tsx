@@ -9,8 +9,9 @@ import {
   paymentStatusOf,
   statusOf,
 } from "@/lib/order-status";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 /** "all" plus every real status, in lifecycle order. */
 const STATUSES = ["all", ...ORDER_STATUSES];
@@ -147,7 +148,7 @@ export default function OrdersPage() {
           ) : error ? (
             <div className="px-6 py-10 text-center text-sm text-slate-500">
               <p className="font-medium text-rose-600">Backend not connected</p>
-              <p className="mt-1 text-slate-400">Set NEXT_PUBLIC_API_URL and connect your orders API.</p>
+              <p className="mt-1 text-slate-400">Check BACKEND_URL and ADMIN_API_KEY on the admin server.</p>
             </div>
           ) : filtered.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-slate-400">No orders match this filter.</div>

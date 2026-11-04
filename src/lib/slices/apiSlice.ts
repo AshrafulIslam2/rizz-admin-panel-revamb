@@ -1,6 +1,8 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3040/api';
+import { CLIENT_API_BASE } from '@/lib/api-base';
+
+const API_BASE_URL = CLIENT_API_BASE;
 
 type PageId = number | string;
 

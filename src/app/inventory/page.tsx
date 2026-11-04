@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import StockTable, { bdt, type StockDashboard } from "./stock-table";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 type Movement = {
   id: string;

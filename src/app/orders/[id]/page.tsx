@@ -19,8 +19,9 @@ import {
   returnStatusOf,
   statusOf,
 } from "@/lib/order-status";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 /**
  * One order, and everything that can be done to it.

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import ProductTabs from './ProductTabs.client'
+import { backendFetch } from '@/lib/backend.server'
 
 type PageProps = {
   params: Promise<{ id: string }>
@@ -80,9 +81,7 @@ function resolveMedia(product: Product) {
 
 export default async function ProductPage({ params }: PageProps) {
   const { id } = await params
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3040/api'
-
-  const res = await fetch(`${baseUrl}/products/${id}`, { cache: 'no-store' })
+  const res = await backendFetch(`/products/${encodeURIComponent(id)}`, { cache: 'no-store' })
   if (res.status === 404) notFound()
   if (!res.ok) {
     return (

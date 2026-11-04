@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { ORDER_STATUS_LABEL, statusOf, type OrderSummaryResponse } from "@/lib/order-status";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 type StatCard = { label: string; value: string; sub: string; color: string };
 

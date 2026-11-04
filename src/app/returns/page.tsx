@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 type Return = { id: string; ref_number: string; type: string; customer_name?: string; customer_phone?: string; items: any[]; exchange_items?: any[]; refund_amount: number; status: string; note?: string; original_tx?: string; created_at: string };
 

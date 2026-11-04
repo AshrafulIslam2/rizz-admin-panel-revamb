@@ -6,8 +6,9 @@ import {
   connectPrinter, disconnectPrinter, isPrinterConnected, isPrinterSupported,
   printReceipt, type ReceiptData,
 } from "@/lib/printer";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API = CLIENT_API_BASE;
 
 type Variant = { id: string; sku?: string; barcode?: string; price: number; sale_price?: number | null; stock_qty: number; attributes: any };
 type Product = { id: string; name: string; slug: string; variants: Variant[] };
@@ -426,7 +427,7 @@ export default function PosPage() {
         `Could not reach the server.\n\n` +
         `API: ${API}/pos\n` +
         `Error: ${e?.message ?? e}\n\n` +
-        `Check that the backend is running and that NEXT_PUBLIC_API_URL points at it.`
+        `Check that the backend is running and that BACKEND_URL / ADMIN_API_KEY are set on the admin server.`
       );
     } finally {
       setSaving(false);

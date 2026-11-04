@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import AutoRefresh from '@/components/auto-refresh'
 import ProductsFilters, { type FilterOption } from '@/components/products-filters'
+import { backendFetch } from '@/lib/backend.server'
 
 type Product = {
   id: string | number
@@ -94,10 +95,9 @@ export default async function ProductsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const sp = (await searchParams) ?? {}
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3040/api'
   let products: Product[] = []
   try {
-    const res = await fetch(`${baseUrl}/products`, { cache: 'no-store' })
+    const res = await backendFetch('/products', { cache: 'no-store' })
     if (!res.ok) throw new Error(`Failed to fetch products: ${res.status}`)
     products = await res.json()
   } catch (err) {

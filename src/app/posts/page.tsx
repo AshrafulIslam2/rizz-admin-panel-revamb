@@ -9,8 +9,9 @@ import {
   type BlogPostRecord,
   type CreateBlogPostPayload,
 } from "@/lib/slices/apiSlice";
+import { CLIENT_API_BASE } from "@/lib/api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3040/api";
+const API_BASE = CLIENT_API_BASE;
 
 type SectionType = "p" | "h2" | "h3" | "ul" | "ol" | "callout" | "table";
 
