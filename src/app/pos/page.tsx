@@ -11,7 +11,7 @@ import { CLIENT_API_BASE } from "@/lib/api-base";
 const API = CLIENT_API_BASE;
 
 type Variant = { id: string; sku?: string; barcode?: string; price: number; sale_price?: number | null; stock_qty: number; attributes: any };
-type Product = { id: string; name: string; slug: string; variants: Variant[] };
+type Product = { id: string; name: string; slug: string; sku?: string | null; variants: Variant[] };
 type CartItem = { variant_id: string; name: string; color: string; size: string; price: number; original_price: number; qty: number; sku?: string };
 
 // Thermal receipt RIZZ logo (SVG inline, matches the black+white R brand mark)
@@ -307,11 +307,30 @@ export default function PosPage() {
     }
   }, [tab]);
 
-  const filtered = search.length < 2 ? [] : products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.slug.includes(search.toLowerCase()) ||
-    p.variants.some((v) => v.sku?.toLowerCase().includes(search.toLowerCase()) || v.barcode?.includes(search))
+  // Matches product name, slug, product SKU, variant SKU and barcode — all
+  // case-insensitive. The product SKU (the one shown on product cards) was
+  // previously not searched, so typing it found nothing.
+  const query = search.trim().toLowerCase();
+  const has = (value: string | null | undefined) => !!value && value.toLowerCase().includes(query);
+  const filtered = query.length < 2 ? [] : products.filter((p) =>
+    has(p.name) ||
+    has(p.slug) ||
+    has(p.sku) ||
+    (p.variants ?? []).some((v) => has(v.sku) || has(v.barcode))
   ).slice(0, 8);
+
+  /** Barcode scanners type the code and press Enter — add the item straight away when it's unambiguous. */
+  function handleSearchEnter() {
+    if (query.length < 2) return;
+    for (const p of products) {
+      const exact = (p.variants ?? []).find(
+        (v) => v.barcode?.toLowerCase() === query || v.sku?.toLowerCase() === query,
+      );
+      if (exact) { addToCart(p, exact); return; }
+    }
+    const candidates = filtered.flatMap((p) => (p.variants ?? []).map((v) => ({ p, v })));
+    if (candidates.length === 1) addToCart(candidates[0].p, candidates[0].v);
+  }
 
   function getVariantStock(variantId: string): number {
     for (const p of products) {
@@ -489,11 +508,11 @@ export default function PosPage() {
           {/* Left: product search */}
           <div className="lg:col-span-3 space-y-4">
             <div className="relative">
-              <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search product, SKU, or scan barcode…" className="w-full rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500" autoFocus />
+              <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSearchEnter(); } }} placeholder="Search product, SKU, or scan barcode…" className="w-full rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500" autoFocus />
               {filtered.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-white/10 bg-slate-900 shadow-xl overflow-hidden">
                   {filtered.map((p) =>
-                    p.variants.map((v) => (
+                    (p.variants ?? []).map((v) => (
                       <button key={v.id} onClick={() => addToCart(p, v)} className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-white/10 transition border-b border-white/5 last:border-0">
                         <div>
                           <p className="text-sm text-white">{p.name}</p>
@@ -513,6 +532,13 @@ export default function PosPage() {
                       </button>
                     ))
                   )}
+                </div>
+              )}
+              {query.length >= 2 && filtered.length === 0 && (
+                <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-400 shadow-xl">
+                  {products.length === 0
+                    ? "Products haven't loaded — check the connection and reload the page."
+                    : `No product matches "${search.trim()}".`}
                 </div>
               )}
             </div>
