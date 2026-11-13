@@ -7,6 +7,7 @@ import {
   printReceipt, type ReceiptData,
 } from "@/lib/printer";
 import { CLIENT_API_BASE } from "@/lib/api-base";
+import { variantImage as pickVariantImage } from "@/lib/product-image";
 
 const API = CLIENT_API_BASE;
 
@@ -14,22 +15,9 @@ type Variant = { id: string; sku?: string; barcode?: string; price: number; sale
 type ProductMedia = { media_url: string; media_type?: string; is_primary?: boolean; alt_text?: string | null };
 type Product = { id: string; name: string; slug: string; sku?: string | null; variants: Variant[]; media?: ProductMedia[] };
 
-/**
- * Thumbnail for a search result. Prefers a photo whose file name or alt text
- * mentions the variant's colour (so "Tan" shows the tan pair), then the
- * primary photo, then the first one.
- */
+/** Thumbnail for a search result: the photo matching the variant's colour, else the main photo. */
 function variantImage(p: Product, v: Variant): string | null {
-  const photos = (p.media ?? []).filter((m) => m.media_url && (m.media_type ?? "IMAGE").toUpperCase() !== "VIDEO");
-  if (photos.length === 0) return null;
-  const color = String(v.attributes?.color ?? "").trim().toLowerCase();
-  if (color) {
-    // Whole-word match, so "tan" doesn't hit words like "standard".
-    const word = new RegExp(`(^|[^a-z])${color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`);
-    const byColor = photos.find((m) => word.test(`${m.media_url} ${m.alt_text ?? ""}`.toLowerCase()));
-    if (byColor) return byColor.media_url;
-  }
-  return (photos.find((m) => m.is_primary) ?? photos[0]).media_url;
+  return pickVariantImage(p.media, v.attributes?.color);
 }
 type CartItem = { variant_id: string; name: string; color: string; size: string; price: number; original_price: number; qty: number; sku?: string };
 

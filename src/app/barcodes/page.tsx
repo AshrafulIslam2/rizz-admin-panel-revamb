@@ -7,6 +7,7 @@ import {
   type LabelData,
 } from "@/lib/printer";
 import { CLIENT_API_BASE } from "@/lib/api-base";
+import { variantImage } from "@/lib/product-image";
 
 const API = CLIENT_API_BASE;
 
@@ -18,6 +19,8 @@ type Variant = {
   sale_price?: number;
   attributes: { size?: string; color?: string };
   product?: { name: string };
+  /** Photo for this variant (colour-matched when possible). On-screen only — not printed. */
+  image?: string | null;
 };
 
 type LabelPresetKey = keyof typeof LABEL_PRESETS;
@@ -93,6 +96,20 @@ function LabelCard({
       }`}
       onClick={onToggle}
     >
+      {/* Product photo — makes the right pair easy to spot. Not part of the printed label. */}
+      <div className="relative -mx-3 -mt-3 mb-2.5 aspect-[4/3] overflow-hidden rounded-t-xl bg-slate-700/60">
+        {v.image ? (
+          <img src={v.image} alt={v.product?.name ?? ""} loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-500">No image</div>
+        )}
+        {(size !== "—" || color !== "—") && (
+          <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            {[color !== "—" ? color : null, size !== "—" ? size : null].filter(Boolean).join(" · ")}
+          </span>
+        )}
+      </div>
+
       {/* Checkbox + name */}
       <div className="flex items-start gap-2">
         <div className={`mt-0.5 h-4 w-4 shrink-0 rounded border ${selected ? "border-teal-500 bg-teal-500" : "border-white/20 bg-slate-700"} flex items-center justify-center`}>
@@ -167,7 +184,7 @@ export default function BarcodesPage() {
         const vars: Variant[] = [];
         for (const p of products) {
           for (const v of (p.variants ?? [])) {
-            vars.push({ ...v, product: { name: p.name } });
+            vars.push({ ...v, product: { name: p.name }, image: variantImage(p.media, v.attributes?.color) });
           }
         }
         setVariants(vars);
