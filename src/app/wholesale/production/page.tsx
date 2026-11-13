@@ -116,7 +116,7 @@ export default function ProductionListPage() {
                         ) : (
                           <div className="h-10 w-10 rounded-lg border border-dashed border-slate-200 bg-slate-50" />
                         )}
-                        <span className="font-medium text-slate-800">{r.product_name}</span>
+                        <Link href={`/wholesale/production/${r.id}`} className="font-medium text-slate-800 hover:text-teal-700 hover:underline">{r.product_name}</Link>
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.product_code || "—"}</td>
@@ -128,6 +128,7 @@ export default function ProductionListPage() {
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-teal-700">{taka(r.retail_price_pair)}</td>
                     <td className="px-4 py-3 text-[11px] text-slate-400">{new Date(r.updated_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
+                      <Link href={`/wholesale/production/${r.id}`} className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">View</Link>
                       <Link href={`/wholesale/production/${r.id}/edit`} className="rounded-lg px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-50">Edit</Link>
                       <button
                         onClick={() => setCopying(r)}

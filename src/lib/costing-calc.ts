@@ -29,6 +29,7 @@ export const PAIRS_PER_DOZEN = 12;
 export type CostSectionKey =
   | 'UPPER'
   | 'SOLE'
+  | 'FINISH'
   | 'FACTORY'
   | 'RETAIL_COMMON'
   | 'RETAIL_PRODUCT';
@@ -99,11 +100,19 @@ export type CostingInput = {
   retailProfitPct?: number;
   /** Comes from the shop-wide retail settings (see calcRetailCommonCostPerPair). */
   retailCommonCostPair?: number;
+  /**
+   * fieldKey -> amount used when that field is left empty on the product.
+   * Lets a line-wide rate (the finish man's per-dozen rate) apply without being
+   * typed into every costing, while a typed amount still overrides it.
+   */
+  defaultEntries?: Record<string, number>;
 };
 
 export type CostingResult = {
   upperCostDozen: number;
   soleCostDozen: number;
+  /** Colour, colour coat, finish man and finishing chemicals. */
+  finishCostDozen: number;
 
   standardCapacityPairs: number;
   standardCapacityDozen: number;
@@ -481,6 +490,35 @@ export function calcFactoryLinePool(
   };
 }
 
+// ── Finishing ───────────────────────────────────────────────────────────────
+
+/** The finish man's piece rate, per dozen. Entered once per line in Factory Cost Settings. */
+export const FINISH_MAN_FIELD_KEY = 'finish_man';
+export const DEFAULT_FINISH_MAN_RATES: Record<ProductLineKey, number> = { SHOE: 680, SANDAL: 280 };
+
+/** Per-dozen finish rate for a line; null line = no default (the admin types it). */
+export function finishManRate(
+  line: ProductLineKey | null,
+  rates?: Partial<Record<ProductLineKey, number>> | null,
+): number {
+  if (!line) return 0;
+  const r = rates?.[line];
+  return r !== undefined && r !== null && Number.isFinite(Number(r)) ? Number(r) : DEFAULT_FINISH_MAN_RATES[line];
+}
+
+/** True when nothing has been typed into a field yet (as opposed to a deliberate 0). */
+export function isBlankEntry(entry: unknown): boolean {
+  if (entry === null || entry === undefined) return true;
+  if (typeof entry === 'string') return entry.trim() === '';
+  if (typeof entry === 'number') return false;
+  if (typeof entry === 'object') {
+    return Object.values(entry as Record<string, unknown>).every(
+      (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === ''),
+    );
+  }
+  return false;
+}
+
 export function calcCosting(input: CostingInput): CostingResult {
   const values = input.values ?? {};
   const fields = input.fields ?? [];
@@ -493,6 +531,8 @@ export function calcCosting(input: CostingInput): CostingResult {
 
   let upperCostDozen = 0;
   let soleCostDozen = 0;
+  let finishCostDozen = 0;
+  const defaults = input.defaultEntries ?? {};
   let factoryProductCostDozen = 0;
   let retailProductCostPair = 0;
 
@@ -507,7 +547,10 @@ export function calcCosting(input: CostingInput): CostingResult {
     // SHEET already returns a per-dozen figure, so it must not be scaled
     // again by the basis conversion below.
     const calculator = f.calculator ?? 'DIRECT';
-    const raw = calcEntry(values[f.key] as CostEntry, calculator);
+    let raw = calcEntry(values[f.key] as CostEntry, calculator);
+    // An empty field falls back to its default (e.g. the line's finish rate);
+    // a deliberate 0 typed by the admin stays 0.
+    if (raw === 0 && isBlankEntry(values[f.key]) && num(defaults[f.key]) > 0) raw = num(defaults[f.key]);
     if (raw === 0) continue;
     const amount = raw;
     const basisForField: CostBasisKey = calculator === 'SHEET' ? 'PER_DOZEN' : f.basis;
@@ -518,6 +561,9 @@ export function calcCosting(input: CostingInput): CostingResult {
         break;
       case 'SOLE':
         soleCostDozen += toPerDozen(amount, basisForField, capacityDozen);
+        break;
+      case 'FINISH':
+        finishCostDozen += toPerDozen(amount, basisForField, capacityDozen);
         break;
       case 'FACTORY':
         // Only the product's own factory costs reach here — packaging,
@@ -537,7 +583,7 @@ export function calcCosting(input: CostingInput): CostingResult {
   // on its own account.
   const factoryCostDozen = allocation.perDozen + factoryProductCostDozen;
 
-  const productionCostDozen = upperCostDozen + soleCostDozen + factoryCostDozen;
+  const productionCostDozen = upperCostDozen + soleCostDozen + finishCostDozen + factoryCostDozen;
   const productionCostPair = productionCostDozen / PAIRS_PER_DOZEN;
 
   // ── Wholesale: straight off the factory cost ──
@@ -555,6 +601,7 @@ export function calcCosting(input: CostingInput): CostingResult {
   return {
     upperCostDozen: money(upperCostDozen),
     soleCostDozen: money(soleCostDozen),
+    finishCostDozen: money(finishCostDozen),
 
     standardCapacityPairs: allocation.capacityPairs,
     standardCapacityDozen: allocation.capacityDozen,

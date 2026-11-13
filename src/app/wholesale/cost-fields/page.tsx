@@ -12,6 +12,7 @@ const input = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outli
 const SECTIONS: { id: CostSection; title: string; note: string }[] = [
   { id: "UPPER", title: "Upper", note: "Upper materials — Tab 2 of the costing form" },
   { id: "SOLE", title: "Sole", note: "Sole materials — Tab 3" },
+  { id: "FINISH", title: "Finish", note: "Colour, colour coat, finish man, finishing chemicals — Finish tab" },
   { id: "FACTORY", title: "Factory & Labour", note: "Labour and factory overhead — Tab 4" },
   { id: "RETAIL_COMMON", title: "Retail Common (monthly)", note: "Shop-wide monthly bills, set on the Retail Cost Settings page" },
   { id: "RETAIL_PRODUCT", title: "Retail Product-Specific", note: "Per-pair extras like a box or bag — Tab 6" },

@@ -14,6 +14,7 @@ import {
   calcFactoryAllocation,
   calcFactoryLinePool,
   CostFieldLike,
+  DEFAULT_FINISH_MAN_RATES,
   FactoryEmployee,
   LABOUR_FIELD_KEY,
   PRODUCT_LINE_LABELS,
@@ -56,6 +57,8 @@ export default function FactoryCostSettingsPage() {
   const [fields, setFields] = useState<CostField[]>([]);
   const [monthly, setMonthly] = useState<Record<string, string>>({});
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  /** Finish man's per-dozen rate, by line, as typed. */
+  const [finishRates, setFinishRates] = useState<Record<ProductLineKey, string>>({ SHOE: "", SANDAL: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +75,10 @@ export default function FactoryCostSettingsPage() {
       for (const [k, v] of Object.entries(s.monthly ?? {})) m[k] = String(v ?? "");
       setMonthly(m);
       setEmployees((s.employees ?? []).map((e) => ({ ...e, role: e.role ?? "", monthly_salary: String(e.monthly_salary ?? "") })));
+      setFinishRates({
+        SHOE: String(s.finish_man_rates?.SHOE ?? DEFAULT_FINISH_MAN_RATES.SHOE),
+        SANDAL: String(s.finish_man_rates?.SANDAL ?? DEFAULT_FINISH_MAN_RATES.SANDAL),
+      });
     } catch (e: any) { setError(e?.message ?? "Failed to load"); }
     finally { setLoading(false); }
   }, []);
@@ -138,6 +145,7 @@ export default function FactoryCostSettingsPage() {
         monthly: payload,
         // New rows get their real id from the server.
         employees: staff.map((e) => ({ ...e, id: e.id.startsWith("new-") ? "" : e.id })),
+        finish_man_rates: { SHOE: Number(finishRates.SHOE) || 0, SANDAL: Number(finishRates.SANDAL) || 0 },
       });
       setEmployees((saved.employees ?? []).map((e) => ({ ...e, role: e.role ?? "", monthly_salary: String(e.monthly_salary ?? "") })));
       setMessage("Saved. Every product costing uses these figures from its next save.");
@@ -228,6 +236,29 @@ export default function FactoryCostSettingsPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* ── Finish man piece rate ── */}
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6">
+              <h2 className="text-lg font-bold text-slate-900">Finish Man Rate</h2>
+              <p className="mb-4 mt-1 text-xs text-slate-500">
+                Paid per dozen finished. Used on every costing&apos;s Finish tab unless a different amount is typed there.
+                If the finish man is paid this way, take him off the Production Staff list so his pay isn&apos;t counted twice.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {PRODUCT_LINES.map((line) => {
+                  const perDozen = Number(finishRates[line]) || 0;
+                  return (
+                    <div key={line}>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{PRODUCT_LINE_LABELS[line]} — per dozen</p>
+                      <input type="number" inputMode="decimal" min="0" step="any" value={finishRates[line]}
+                        onChange={(e) => { setFinishRates((r) => ({ ...r, [line]: e.target.value })); setMessage(null); }}
+                        placeholder={String(DEFAULT_FINISH_MAN_RATES[line])} className={input} />
+                      <p className="mt-1 text-[11px] text-slate-400">= {taka(Math.round((perDozen / 12) * 100) / 100)} per pair</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* ── Monthly bills ── */}

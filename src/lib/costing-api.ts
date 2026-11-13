@@ -10,7 +10,7 @@ import type { FactoryEmployee, FactoryLinePool, ProductLineKey } from "@/lib/cos
 
 export const COSTING_API = CLIENT_API_BASE;
 
-export type CostSection = "UPPER" | "SOLE" | "FACTORY" | "RETAIL_COMMON" | "RETAIL_PRODUCT";
+export type CostSection = "UPPER" | "SOLE" | "FINISH" | "FACTORY" | "RETAIL_COMMON" | "RETAIL_PRODUCT";
 export type CostBasis = "PER_DOZEN" | "PER_PAIR" | "PER_MONTH";
 export type CostCalculator = "DIRECT" | "SQFT" | "UNIT" | "SHEET" | "CHEMICAL";
 
@@ -37,6 +37,8 @@ export type FactorySettings = {
   monthly: Record<string, number>;
   /** Production staff tagged Shoe / Sandal / both. Empty = the single salary figure is used. */
   employees: FactoryEmployee[];
+  /** Finish man's piece rate per dozen, by line. */
+  finish_man_rates: Record<ProductLineKey, number>;
   total_monthly: number;
   /** The pool a Shoe design and a Sandal design are each costed against. */
   line_pools: Record<ProductLineKey, FactoryLinePool>;
@@ -122,7 +124,11 @@ export const archiveCostField = (id: string) => call<CostField>(`/costing/fields
 
 // ── Factory settings (shop-wide monthly bills) ──
 export const getFactorySettings = () => call<FactorySettings>("/costing/factory-settings");
-export const saveFactorySettings = (dto: { monthly: Record<string, number>; employees?: FactoryEmployee[] }) =>
+export const saveFactorySettings = (dto: {
+  monthly: Record<string, number>;
+  employees?: FactoryEmployee[];
+  finish_man_rates?: Partial<Record<ProductLineKey, number>>;
+}) =>
   call<FactorySettings>("/costing/factory-settings", "PUT", dto);
 
 // ── Retail settings ──

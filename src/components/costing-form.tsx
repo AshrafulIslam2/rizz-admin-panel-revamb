@@ -25,7 +25,10 @@ import {
   PRODUCT_LINE_LABELS,
   calcCosting,
   calcFactoryLinePool,
+  FINISH_MAN_FIELD_KEY,
+  finishManRate,
   inferProductLine,
+  isBlankEntry,
   isProductLine,
   type ProductLineKey,
   calcEntry,
@@ -58,6 +61,7 @@ const TABS = [
   { id: "product", label: "Product Details" },
   { id: "upper", label: "Upper" },
   { id: "sole", label: "Sole" },
+  { id: "finish", label: "Finish" },
   { id: "factory", label: "Factory & Labour" },
   { id: "wholesale", label: "Wholesale Pricing" },
   { id: "retailcost", label: "Retail Cost" },
@@ -70,6 +74,7 @@ type TabId = (typeof TABS)[number]["id"];
 const GROUP_ORDER: Record<string, string[]> = {
   UPPER: ["materials", "foam_cover", "accessories", "chemicals"],
   SOLE: ["insole", "midsole", "outsole", "bit", "tuffy", "chemicals"],
+  FINISH: ["finishing", "chemicals"],
 };
 
 const GROUP_LABEL: Record<string, string> = {
@@ -82,6 +87,7 @@ const GROUP_LABEL: Record<string, string> = {
   outsole: "Outsole",
   bit: "Bit",
   tuffy: "Tuffy",
+  finishing: "Finishing",
   other: "Other",
 };
 
@@ -168,12 +174,14 @@ function Derived({ label, value, strong = false }: { label: string; value: strin
  * total, so an upgrade never silently drops money from a costing.
  */
 function CalcRow({
-  field, raw, onPatch, onDirect,
+  field, raw, onPatch, onDirect, defaultAmount,
 }: {
   field: CostField;
   raw: unknown;
   onPatch: (patch: Entry) => void;
   onDirect: (v: string) => void;
+  /** Used when the box is left empty (e.g. the line's finish rate); shown as the placeholder. */
+  defaultAmount?: number;
 }) {
   const calc = field.calculator ?? "DIRECT";
   const isObj = raw !== null && typeof raw === "object";
@@ -196,7 +204,7 @@ function CalcRow({
           type="number" inputMode="decimal" step="any"
           value={isObj ? (e.amount ?? "") : ((raw as string) ?? "")}
           onChange={(ev) => (isObj ? onPatch({ amount: ev.target.value }) : onDirect(ev.target.value))}
-          placeholder="0" className={input}
+          placeholder={defaultAmount ? `${defaultAmount} (default)` : "0"} className={input}
         />
       </div>
     );
@@ -377,6 +385,12 @@ export default function CostingForm({ costingId }: Props) {
   const guessedLine = inferProductLine(product.category, product.product_name);
   const effectiveLine: ProductLineKey | null = lineChoice || guessedLine;
 
+  /** Amounts used for fields left empty — the finish man's per-dozen rate for this line. */
+  const defaultEntries = useMemo<Record<string, number>>(
+    () => ({ [FINISH_MAN_FIELD_KEY]: finishManRate(effectiveLine, factory?.finish_man_rates) }),
+    [effectiveLine, factory],
+  );
+
   /** Only wages of people on this line, snacks by headcount, other bills shared. */
   const linePool = useMemo(
     () =>
@@ -396,11 +410,12 @@ export default function CostingForm({ costingId }: Props) {
       fields: fields as unknown as CostFieldLike[],
       standardCapacityPairs: num(capacityPairs),
       factoryMonthlyTotal: linePool.total,
+      defaultEntries,
       wholesaleProfitPct: num(wholesalePct),
       retailProfitPct: num(retailPct),
       retailCommonCostPair: retail?.retail_common_cost_pair ?? 0,
     });
-  }, [valuesWithModes, fields, capacityPairs, linePool, wholesalePct, retailPct, retail]);
+  }, [valuesWithModes, fields, capacityPairs, linePool, defaultEntries, wholesalePct, retailPct, retail]);
 
   const bySection = useMemo(() => {
     const m: Record<string, CostField[]> = {};
@@ -430,9 +445,12 @@ export default function CostingForm({ costingId }: Props) {
 
   /** Per-dozen subtotal for one sub-tab. */
   const groupTotal = useCallback((section: string, group: string): number =>
-    groupFields(section, group).reduce(
-      (t, f) => t + calcEntry(values[f.key] as CostEntry, (f.calculator ?? "DIRECT") as CostCalculatorKey), 0),
-  [groupFields, values]);
+    groupFields(section, group).reduce((t, f) => {
+      const v = calcEntry(values[f.key] as CostEntry, (f.calculator ?? "DIRECT") as CostCalculatorKey);
+      // Same fallback as the calculation: an empty box uses its default.
+      return t + (v === 0 && isBlankEntry(values[f.key]) ? (defaultEntries[f.key] ?? 0) : v);
+    }, 0),
+  [groupFields, values, defaultEntries]);
 
   function patchEntry(key: string, patch: Entry) {
     touched.current.add(key);
@@ -615,6 +633,7 @@ export default function CostingForm({ costingId }: Props) {
                 raw={values[f.key]}
                 onPatch={(patch) => patchEntry(f.key, patch)}
                 onDirect={(v) => setDirect(f.key, v)}
+                defaultAmount={defaultEntries[f.key]}
               />
             ))
           )}
@@ -778,6 +797,18 @@ export default function CostingForm({ costingId }: Props) {
             </div>
           )}
 
+          {tab === "finish" && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-bold text-slate-900">Finish Section</h2>
+              <p className="text-xs text-slate-500">
+                Colour, colour coat, the finish man and finishing chemicals — all per dozen. Leave Finish Man Cost empty to use
+                the {effectiveLine ? PRODUCT_LINE_LABELS[effectiveLine].toLowerCase() : "line"} rate
+                {defaultEntries[FINISH_MAN_FIELD_KEY] ? ` (${taka(defaultEntries[FINISH_MAN_FIELD_KEY])} / dozen)` : ""} from Factory Cost Settings.
+              </p>
+              {groupedSection("FINISH", result.finishCostDozen)}
+            </div>
+          )}
+
           {tab === "factory" && (
             <div className="space-y-5">
               <h2 className="text-lg font-bold text-slate-900">Factory &amp; Labour</h2>
@@ -906,7 +937,7 @@ export default function CostingForm({ costingId }: Props) {
               {flatSection("FACTORY", result.factoryCostDozen)}
 
               <div className="mt-6 rounded-2xl border border-slate-900 bg-slate-900 px-5 py-4 text-white">
-                <div className="flex items-center justify-between"><span className="text-sm">Upper + Sole + Factory</span><span className="text-sm tabular-nums opacity-75">{taka(result.upperCostDozen)} + {taka(result.soleCostDozen)} + {taka(result.factoryCostDozen)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-sm">Upper + Sole + Finish + Factory</span><span className="text-sm tabular-nums opacity-75">{taka(result.upperCostDozen)} + {taka(result.soleCostDozen)} + {taka(result.finishCostDozen)} + {taka(result.factoryCostDozen)}</span></div>
                 <div className="mt-3 flex items-center justify-between border-t border-white/20 pt-3"><span className="font-semibold">Production Cost / Dozen</span><span className="text-xl font-bold tabular-nums">{taka(result.productionCostDozen)}</span></div>
                 <div className="mt-1 flex items-center justify-between"><span className="text-sm opacity-75">÷ {PAIRS_PER_DOZEN} = Production Cost / Pair</span><span className="text-lg font-bold tabular-nums text-teal-300">{taka(result.productionCostPair)}</span></div>
               </div>
@@ -994,10 +1025,10 @@ export default function CostingForm({ costingId }: Props) {
 
               {/* Where the Upper and Sole money actually went */}
               <div className="grid gap-4 sm:grid-cols-2">
-                {(["UPPER", "SOLE"] as const).map((sec) => (
+                {(["UPPER", "SOLE", "FINISH"] as const).map((sec) => (
                   <div key={sec} className="rounded-2xl border border-slate-200 p-4">
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                      {sec === "UPPER" ? "Upper breakdown" : "Sole breakdown"}
+                      {sec === "UPPER" ? "Upper breakdown" : sec === "SOLE" ? "Sole breakdown" : "Finish breakdown"}
                     </p>
                     {groupsOf(sec).map((g) => (
                       <Stat
@@ -1007,7 +1038,7 @@ export default function CostingForm({ costingId }: Props) {
                       />
                     ))}
                     <div className="mt-1 border-t border-slate-100 pt-1">
-                      <Stat label="Total / Dozen" value={taka(sec === "UPPER" ? result.upperCostDozen : result.soleCostDozen)} strong />
+                      <Stat label="Total / Dozen" value={taka(sec === "UPPER" ? result.upperCostDozen : sec === "SOLE" ? result.soleCostDozen : result.finishCostDozen)} strong />
                     </div>
                   </div>
                 ))}
@@ -1018,6 +1049,7 @@ export default function CostingForm({ costingId }: Props) {
                   <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Production</p>
                   <Stat label="Upper / Dozen" value={taka(result.upperCostDozen)} />
                   <Stat label="Sole / Dozen" value={taka(result.soleCostDozen)} />
+                  <Stat label="Finish / Dozen" value={taka(result.finishCostDozen)} />
                   <Stat label="Factory / Dozen" value={taka(result.factoryCostDozen)} />
                   <Stat label="Cost / Dozen" value={taka(result.productionCostDozen)} strong />
                   <Stat label="Cost / Pair" value={taka(result.productionCostPair)} strong />
@@ -1070,6 +1102,7 @@ export default function CostingForm({ costingId }: Props) {
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Live Summary</p>
             <Stat label="Upper / Dozen" value={taka(result.upperCostDozen)} />
             <Stat label="Sole / Dozen" value={taka(result.soleCostDozen)} />
+            <Stat label="Finish / Dozen" value={taka(result.finishCostDozen)} />
             <Stat label="Factory / Dozen" value={taka(result.factoryCostDozen)} />
             <div className="my-2 border-t border-slate-100" />
             <Stat label="Production Cost / Pair" value={taka(result.productionCostPair)} strong />
